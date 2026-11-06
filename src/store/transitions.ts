@@ -7,8 +7,10 @@
  * - `submitting` is the idempotent submit marker. It is left only by `applied`, `unverified`,
  *   `needs-you` or `failed`; never back to `approved`, so an interrupted submit is never retried
  *   blindly.
- * - Every status except the ones in `TERMINAL_STATUSES` and `submitting` may go to `skipped` or
- *   `closed`.
+ * - A job that was submitted (`applied` and everything after it, and `unverified`) can never be
+ *   `skipped`: `skipped` can return to `found`, which would let an already-sent application be
+ *   sent twice. Use `withdrawn` or `closed` for those instead.
+ * - Every status before `submitting` may go to `skipped` or `closed`.
  * - `needs-you` remembers where the job came from and may return there (see `allowedNextStatuses`).
  *
  * Example: `allowedNextStatuses("approved", undefined)` includes `"submitting"` but not `"applied"`.
@@ -27,10 +29,10 @@ export const ALLOWED_TRANSITIONS: Readonly<Record<JobStatus, readonly JobStatus[
   "resume-ready": ["approved", "needs-you", "failed", "skipped", "closed"],
   approved: ["submitting", "resume-ready", "needs-you", "failed", "skipped", "closed"],
   submitting: ["applied", "unverified", "needs-you", "failed"],
-  applied: ["contacted", "interviewing", "rejected", "withdrawn", "skipped", "closed"],
-  contacted: ["interviewing", "offer", "rejected", "withdrawn", "skipped", "closed"],
-  interviewing: ["offer", "rejected", "withdrawn", "skipped", "closed"],
-  offer: ["rejected", "withdrawn", "skipped", "closed"],
+  applied: ["contacted", "interviewing", "rejected", "withdrawn", "closed"],
+  contacted: ["interviewing", "offer", "rejected", "withdrawn", "closed"],
+  interviewing: ["offer", "rejected", "withdrawn", "closed"],
+  offer: ["rejected", "withdrawn", "closed"],
   rejected: [],
   skipped: ["found", "closed"],
   "needs-you": ["skipped", "closed", "failed"],
@@ -42,7 +44,6 @@ export const ALLOWED_TRANSITIONS: Readonly<Record<JobStatus, readonly JobStatus[
     "withdrawn",
     "needs-you",
     "failed",
-    "skipped",
     "closed",
   ],
   failed: ["skipped", "closed"],

@@ -36,16 +36,19 @@ describe("the transition table", () => {
     expect(allowedNextStatuses("unverified", "approved")).not.toContain("approved");
   });
 
-  it("lets every non-final status except submitting go to skipped and closed", () => {
-    for (const status of JOB_STATUSES) {
-      if (TERMINAL_STATUSES.includes(status) || status === "submitting") {
-        continue;
-      }
+  it("lets every status before submitting go to skipped and closed", () => {
+    const beforeSubmit = ["found", "shortlisted", "resume-ready", "approved"] as const;
+    for (const status of beforeSubmit) {
       const next = allowedNextStatuses(status, undefined);
-      if (status !== "skipped") {
-        expect(next).toContain("skipped");
-      }
+      expect(next).toContain("skipped");
       expect(next).toContain("closed");
+    }
+  });
+
+  it("never lets a submitted job be skipped, so skip-then-undo cannot resend it", () => {
+    const submitted = ["applied", "contacted", "interviewing", "offer", "unverified"] as const;
+    for (const status of submitted) {
+      expect(allowedNextStatuses(status, undefined)).not.toContain("skipped");
     }
   });
 

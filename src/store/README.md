@@ -53,24 +53,24 @@ log.recent(10); // newest first; includes the upsert and the transition above
 
 The single source of truth is `ALLOWED_TRANSITIONS` in `transitions.ts`. An illegal move throws `ScoutError("illegal-transition")` whose message names both statuses and the allowed next ones.
 
-| From           | May move to                                                                             |
-| -------------- | --------------------------------------------------------------------------------------- |
-| `found`        | shortlisted, needs-you, failed, skipped, closed                                         |
-| `shortlisted`  | resume-ready, needs-you, failed, skipped, closed                                        |
-| `resume-ready` | approved, needs-you, failed, skipped, closed                                            |
-| `approved`     | submitting, resume-ready, needs-you, failed, skipped, closed                            |
-| `submitting`   | applied, unverified, needs-you, failed (nothing else)                                   |
-| `applied`      | contacted, interviewing, rejected, withdrawn, skipped, closed                           |
-| `contacted`    | interviewing, offer, rejected, withdrawn, skipped, closed                               |
-| `interviewing` | offer, rejected, withdrawn, skipped, closed                                             |
-| `offer`        | rejected, withdrawn, skipped, closed                                                    |
-| `unverified`   | contacted, interviewing, offer, rejected, withdrawn, needs-you, failed, skipped, closed |
-| `needs-you`    | the status it came from, plus skipped, closed, failed                                   |
-| `skipped`      | found (undo), closed                                                                    |
-| `failed`       | skipped, closed                                                                         |
-| `rejected`     | none (final)                                                                            |
-| `closed`       | none (final)                                                                            |
-| `withdrawn`    | none (final)                                                                            |
+| From           | May move to                                                                    |
+| -------------- | ------------------------------------------------------------------------------ |
+| `found`        | shortlisted, needs-you, failed, skipped, closed                                |
+| `shortlisted`  | resume-ready, needs-you, failed, skipped, closed                               |
+| `resume-ready` | approved, needs-you, failed, skipped, closed                                   |
+| `approved`     | submitting, resume-ready, needs-you, failed, skipped, closed                   |
+| `submitting`   | applied, unverified, needs-you, failed (nothing else)                          |
+| `applied`      | contacted, interviewing, rejected, withdrawn, closed                           |
+| `contacted`    | interviewing, offer, rejected, withdrawn, closed                               |
+| `interviewing` | offer, rejected, withdrawn, closed                                             |
+| `offer`        | rejected, withdrawn, closed                                                    |
+| `unverified`   | contacted, interviewing, offer, rejected, withdrawn, needs-you, failed, closed |
+| `needs-you`    | the status it came from, plus skipped, closed, failed                          |
+| `skipped`      | found (undo), closed                                                           |
+| `failed`       | skipped, closed                                                                |
+| `rejected`     | none (final)                                                                   |
+| `closed`       | none (final)                                                                   |
+| `withdrawn`    | none (final)                                                                   |
 
 Rules that always hold:
 
