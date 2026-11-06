@@ -114,14 +114,18 @@ export function createProfileView(root, context) {
   }
 
   /**
-   * Sends the whole profile `next` to the server. On success the stored copy replaces the page's
+   * Applies `change` to a fresh copy of the latest stored profile and sends the whole result to
+   * the server (the copy is taken when this save's turn comes, so quick successive edits never
+   * overwrite each other). On success the stored copy replaces the page's
    * copy, the message shows the new version and the preview is refreshed; the form is redrawn when
    * `redraw` is true. Resolves to true on success; on failure the page shows the server's sentence
    * and redraws from the stored copy.
    */
-  function saveProfile(next, redraw) {
+  function saveProfile(change, redraw) {
     const outcome = saveQueue.then(async () => {
       try {
+        const next = structuredClone(state.profile);
+        change(next);
         const reply = await context.api.putProfile(next);
         state.profile = reply.profile;
         context.clearError();
@@ -143,9 +147,7 @@ export function createProfileView(root, context) {
 
   /** Saves a change to one simple field (contact, education, summary, skills) without redrawing the form. */
   function saveField(change) {
-    const next = structuredClone(state.profile);
-    change(next);
-    return saveProfile(next, false);
+    return saveProfile(change, false);
   }
 
   /* ---------- preview ---------- */
@@ -393,23 +395,25 @@ export function createProfileView(root, context) {
     render();
   }
 
-  /** Checks the open draft, writes it into a copy of the profile and saves. */
+  /** Checks the open draft, writes it into a fresh copy of the stored profile and saves. */
   async function saveEditing() {
     syncDraft();
     const { section, entryIndex, pointIndex, draft, isNew } = state.editing;
-    const next = structuredClone(state.profile);
+    let change;
     if (pointIndex === -1) {
       if (draft.title.trim() === "") {
         context.showError("An entry needs a title before it can be saved.");
         return;
       }
       const cleaned = withoutBlankOptionals(draft, ["link", "live", "note"]);
-      if (isNew) next[section].push({ ...cleaned, points: [] });
-      else {
-        const target = next[section][entryIndex];
-        for (const key of ["link", "live", "note"]) delete target[key];
-        Object.assign(target, cleaned);
-      }
+      change = (next) => {
+        if (isNew) next[section].push({ ...cleaned, points: [] });
+        else {
+          const target = next[section][entryIndex];
+          for (const key of ["link", "live", "note"]) delete target[key];
+          Object.assign(target, cleaned);
+        }
+      };
     } else {
       if (draft.text === "") {
         context.showError("A point needs wording before it can be saved.");
@@ -419,10 +423,12 @@ export function createProfileView(root, context) {
         ...draft,
         variants: draft.variants.filter((variant) => variant.text !== ""),
       };
-      if (isNew) next[section][entryIndex].points.push(cleaned);
-      else next[section][entryIndex].points[pointIndex] = cleaned;
+      change = (next) => {
+        if (isNew) next[section][entryIndex].points.push(cleaned);
+        else next[section][entryIndex].points[pointIndex] = cleaned;
+      };
     }
-    if (await saveProfile(next, false)) {
+    if (await saveProfile(change, false)) {
       state.editing = null;
       state.armedKey = null;
       render();
@@ -438,12 +444,12 @@ export function createProfileView(root, context) {
       render();
       return;
     }
-    const next = structuredClone(state.profile);
-    if (pointIndex === -1) next[section].splice(entryIndex, 1);
-    else next[section][entryIndex].points.splice(pointIndex, 1);
     state.editing = null;
     state.armedKey = null;
-    await saveProfile(next, true);
+    await saveProfile((next) => {
+      if (pointIndex === -1) next[section].splice(entryIndex, 1);
+      else next[section][entryIndex].points.splice(pointIndex, 1);
+    }, true);
   }
 
   function addVariant() {

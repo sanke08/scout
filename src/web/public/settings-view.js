@@ -52,11 +52,15 @@ export function createSettingsView(root, context, onChanged) {
     if (element) element.textContent = text;
   }
 
-  /** Sends `next` to the server and, once saved, shows it. A failure puts the page back to the stored values. */
-  function save(next) {
+  /**
+   * Saves the settings that `makeNext` builds from the latest stored copy (read when this save's
+   * turn comes, so quick successive changes never overwrite each other). A failure puts the page
+   * back to the stored values.
+   */
+  function save(makeNext) {
     queue = queue.then(async () => {
       try {
-        const reply = await context.api.putSettings(next);
+        const reply = await context.api.putSettings(makeNext(state.settings));
         state.settings = reply.settings;
         context.clearError();
         showMessage("Saved.");
@@ -73,7 +77,7 @@ export function createSettingsView(root, context, onChanged) {
 
   /** Saves one changed setting. */
   function change(key, value) {
-    return save({ ...state.settings, [key]: value });
+    return save((latest) => ({ ...latest, [key]: value }));
   }
 
   /** A switch bound to a yes-or-no setting. */
@@ -213,7 +217,10 @@ export function createSettingsView(root, context, onChanged) {
           const id = `board-${board}`;
           const current = state.settings.boardLevels[board] ?? "prepare";
           const pick = (level) =>
-            change("boardLevels", { ...state.settings.boardLevels, [board]: level });
+            save((latest) => ({
+              ...latest,
+              boardLevels: { ...latest.boardLevels, [board]: level },
+            }));
           return row(
             id,
             board.charAt(0).toUpperCase() + board.slice(1),
@@ -364,7 +371,11 @@ export function createSettingsView(root, context, onChanged) {
               { class: "ctl" },
               h(
                 "button",
-                { class: "btn", type: "button", on: { click: () => save({ ...state.defaults }) } },
+                {
+                  class: "btn",
+                  type: "button",
+                  on: { click: () => save(() => ({ ...state.defaults })) },
+                },
                 "Reset",
               ),
             ),

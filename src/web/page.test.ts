@@ -6,6 +6,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { DEFAULT_SETTINGS } from "../shared/index.js";
 import { STATIC_FILES } from "./static-files.js";
 
 /** A stand-in for one DOM node: just enough tree, attribute and event behaviour for the page code. */
@@ -44,6 +45,9 @@ class FakeNode {
   }
   addEventListener(name: string, listener: (event: unknown) => void): void {
     this.listeners.set(name, [...(this.listeners.get(name) ?? []), listener]);
+  }
+  fire(name: string, event: unknown): void {
+    for (const listener of this.listeners.get(name) ?? []) listener(event);
   }
   click(): void {
     for (const listener of this.listeners.get("click") ?? []) listener({ target: this });
@@ -429,5 +433,43 @@ describe("digest view", () => {
     view.handleKey(key("a"));
     await settle();
     expect(errors).toEqual(["That job can no longer be approved."]);
+  });
+});
+
+describe("instant saves", () => {
+  interface SettingsModule {
+    createSettingsView: (
+      root: FakeNode,
+      context: unknown,
+      onChanged: (settings: unknown) => void,
+    ) => { load: () => Promise<void> };
+  }
+
+  it("never lets a quick second change overwrite the first", async () => {
+    const { createSettingsView } = await loadModule<SettingsModule>("settings-view.js");
+    const stored = { ...DEFAULT_SETTINGS };
+    const sent: Record<string, unknown>[] = [];
+    const api = {
+      getSettings: async () => ({ settings: { ...stored }, defaults: { ...DEFAULT_SETTINGS } }),
+      putSettings: async (settings: Record<string, unknown>) => {
+        sent.push(settings);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        Object.assign(stored, settings);
+        return { settings: { ...stored } };
+      },
+    };
+    const root = new FakeNode();
+    const view = createSettingsView(
+      root,
+      { api, showError: () => undefined, clearError: () => undefined },
+      () => undefined,
+    );
+    await view.load();
+    const pick = (id: string) => root.findAll((node) => node.attributes.get("id") === id)[0];
+    pick("automationPaused")?.fire("change", { target: { checked: true } });
+    pick("readAlertEmails")?.fire("change", { target: { checked: true } });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({ automationPaused: true, readAlertEmails: true });
   });
 });
