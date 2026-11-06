@@ -21,3 +21,4 @@ export {
   SCORING_CANDIDATES_PER_PASS,
 } from "./shortlist.js";
 export { registerFoldersCommands } from "./commands/folders-register.js";
+export { registerApplyCommands } from "./commands/apply-commands.js";

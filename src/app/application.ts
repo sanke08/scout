@@ -50,6 +50,7 @@ import {
   type ConnectToMailbox,
   type ImapCredentials,
 } from "../tracking/index.js";
+import type { ApplyEnvironmentOverrides } from "./commands/apply-environment.js";
 import { createBoardStore, type BoardStore } from "./boards-store.js";
 import { readModelCallsToday, syncJobFolder, withFolderSync } from "./folder-support.js";
 import { createScoreStore, type ScoreStore } from "./score-store.js";
@@ -102,6 +103,11 @@ export interface ApplicationOptions {
    * connection. Tests pass a function that returns a fake connection serving saved emails.
    */
   mailboxConnector?: (credentials: ImapCredentials) => ConnectToMailbox;
+  /**
+   * Replaces the outside effects of `scout apply` (browser, page download, typed line, LaTeX compile,
+   * pause). Tests pass fakes here; the real program passes none.
+   */
+  apply?: ApplyEnvironmentOverrides;
 }
 
 /** The joined-up Scout: every module, built once, plus the few helpers that need several of them. */

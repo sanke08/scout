@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { Command, CommanderError } from "commander";
 import { registerCommands, type ApplicationOptions } from "./app/index.js";
 import { registerFoldersCommands } from "./app/index.js";
+import { registerApplyCommands } from "./app/index.js";
 import { ScoutError } from "./shared/index.js";
 import { registerMailAndNotesCommands } from "./app/index.js";
 
@@ -43,6 +44,7 @@ export function buildProgram(overrides: ApplicationOptions = {}): Command {
   registerCommands(program, overrides);
   registerFoldersCommands(program, overrides);
   registerMailAndNotesCommands(program, overrides);
+  registerApplyCommands(program, overrides);
   return program;
 }
 
