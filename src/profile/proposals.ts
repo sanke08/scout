@@ -161,11 +161,16 @@ export function createProposalStore(
       const file = readProposalFile(path);
       const proposal = findProposal(file, id);
       const profile = profileStore.load();
-      const changed = addVariant(profile, toPointAddress(proposal), {
-        text: proposal.text,
-        keys: proposal.keys,
-      });
-      const saved = profileStore.save(changed);
+      const address = toPointAddress(proposal);
+      const alreadyThere = profile[address.section][address.entryIndex]?.points[
+        address.pointIndex
+      ]?.variants.some((variant) => variant.text === proposal.text);
+      // After a crash between saving and removing the proposal, approving again must not add a
+      // second copy of the same wording.
+      const changed = alreadyThere
+        ? profile
+        : addVariant(profile, address, { text: proposal.text, keys: proposal.keys });
+      const saved = alreadyThere ? profile : profileStore.save(changed);
       writeProposals(file.proposals.filter((other) => other.id !== id));
       return saved;
     },

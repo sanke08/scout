@@ -143,3 +143,34 @@ describe("proposal store", () => {
     expect(error.message).toContain("proposals[0].id");
   });
 });
+
+describe("approving the same proposal twice after a crash", () => {
+  it("does not add a second copy of the wording", () => {
+    const directory = mkdtempSync(join(tmpdir(), "scout-proposals-"));
+    try {
+      const profileStore = createProfileStore(join(directory, "profile.json"));
+      profileStore.save(structuredClone(sampleProfile()));
+      const store = createProposalStore(join(directory, "proposals.json"));
+      const target = { section: "experience" as const, entryIndex: 0, pointIndex: 2 };
+      const proposal = store.add({
+        target,
+        text: "Designed retry screens so a failed payment is always clear to the guest.",
+        keys: ["React"],
+        claimCheck: "passed",
+      });
+      store.approve(proposal.id, profileStore);
+      const afterFirst = profileStore.load();
+      // Put the proposal back, as if the crash happened before it was removed.
+      store.add({ target, text: proposal.text, keys: proposal.keys, claimCheck: "passed" });
+      const second = store.list()[0];
+      store.approve(second!.id, profileStore);
+      const afterSecond = profileStore.load();
+      expect(afterSecond.experience[0]?.points[2]?.variants).toHaveLength(
+        afterFirst.experience[0]?.points[2]?.variants.length ?? -1,
+      );
+      expect(afterSecond.version).toBe(afterFirst.version);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});

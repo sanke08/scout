@@ -12,7 +12,7 @@
   },
   "education": {
     "degree": "Bachelor of Science in Computer Science",
-    "dates": "Sep 2019 – Jun 2023",
+    "dates": "Sep 2019 \u2013 Jun 2023",
     "school": "Example Technical University",
     "grade": "GPA: 3.7 / 4.0"
   },
@@ -42,7 +42,7 @@
     {
       "title": "Software Engineer",
       "org": "Harbor Systems",
-      "dates": "Jul 2023 – Present",
+      "dates": "Jul 2023 \u2013 Present",
       "place": "Berlin, Germany",
       "points": [
         {
@@ -89,7 +89,7 @@
     {
       "title": "Web Developer Intern",
       "org": "Brightpath Digital",
-      "dates": "Jan 2023 – Jun 2023",
+      "dates": "Jan 2023 \u2013 Jun 2023",
       "place": "Berlin, Germany",
       "points": [
         {
@@ -138,7 +138,7 @@
         },
         {
           "text": "Moved messages that failed three deliveries to a dead-letter list so they stop retrying, and exposed per-queue counts.",
-          "allowed": ["dead-letter queue", "message queue"],
+          "allowed": ["dead-letter queue", "message queue", "DLQ"],
           "variants": [
             {
               "text": "Moved messages that failed three deliveries to a dead-letter queue (DLQ) so they stop retrying, and exposed per-queue counts.",
