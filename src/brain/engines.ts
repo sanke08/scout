@@ -22,17 +22,21 @@ export interface EngineConfiguration {
 
 /**
  * Arguments for Claude Code in non-interactive mode.
- * ASSUMPTION: `-p <prompt>` prints the reply as plain text and exits.
- * Example: `buildClaudeArguments("Say hi")` gives `["-p", "Say hi"]`.
+ * Checked against `claude --help` on 2026-11-07: `-p` prints the reply and exits, `--tools ""`
+ * turns off every built-in tool (so the model can only answer, never read or edit files), and
+ * `--no-session-persistence` keeps these calls out of the user's saved sessions.
+ * Example: `buildClaudeArguments("Say hi")` gives
+ * `["-p", "Say hi", "--tools", "", "--no-session-persistence"]`.
  */
 export function buildClaudeArguments(prompt: string): string[] {
-  return ["-p", prompt];
+  return ["-p", prompt, "--tools", "", "--no-session-persistence"];
 }
 
 /**
  * Arguments for Codex in non-interactive mode.
- * ASSUMPTIONS: `exec <prompt>` runs one prompt and exits; `--sandbox read-only` stops it from
- * writing files; `--skip-git-repo-check` lets it run outside a git folder.
+ * Checked against `codex exec --help` on 2026-11-07: `exec <prompt>` runs one prompt and exits;
+ * `--sandbox read-only` stops it from writing files; `--skip-git-repo-check` lets it run outside a
+ * git folder.
  * Example: `buildCodexArguments("Say hi")` gives `["exec", "--sandbox", "read-only", "--skip-git-repo-check", "Say hi"]`.
  */
 export function buildCodexArguments(prompt: string): string[] {
