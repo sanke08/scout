@@ -1,0 +1,22 @@
+From: "Naukri Job Alerts" <jobalert@naukri.example.com>
+To: Alex Rivera <alex.rivera@example.com>
+Subject: Jobs for you: Backend Developer in Bengaluru
+Date: Mon, 02 Nov 2026 05:30:00 +0000
+Message-ID: <alert-naukri-001@naukri.example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<h2>Jobs matching your profile</h2>
+<table>
+<tr><td><a href="https://www.naukri.example.com/job-listings-backend-developer-1100001">Backend Developer</a></td></tr>
+<tr><td>Quayside Digital</td></tr>
+<tr><td>Bengaluru | 2-5 Yrs | Not disclosed</td></tr>
+</table>
+<table>
+<tr><td><a href="https://www.naukri.example.com/job-listings-node-js-engineer-1100002">Node.js Engineer</a></td></tr>
+<tr><td>Lakeside Software</td></tr>
+<tr><td>Remote | 1-4 Yrs | Not disclosed</td></tr>
+</table>
+<p><a href="https://www.naukri.example.com/alerts/manage">Manage alerts</a></p>
+</body></html>
