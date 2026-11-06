@@ -1,0 +1,355 @@
+{
+  "schemaVersion": 1,
+  "version": 1,
+  "identity": {
+    "name": "Alex Rivera",
+    "location": "Berlin, Germany",
+    "phone": "+49 30 0000 0000",
+    "email": "alex.rivera@example.com",
+    "github": "github.com/example-alex",
+    "linkedin": "https://www.linkedin.com/in/example-alex",
+    "portfolio": "alex-rivera.example.com"
+  },
+  "education": {
+    "degree": "Bachelor of Science in Computer Science",
+    "dates": "Sep 2019 – Jun 2023",
+    "school": "Example Technical University",
+    "grade": "GPA: 3.7 / 4.0"
+  },
+  "summary": {
+    "text": "Software Engineer at Harbor Systems building a booking platform in TypeScript and Node.js, after an internship building React web apps. Also builds backend services in Go through personal projects.",
+    "variants": []
+  },
+  "skills": [
+    {
+      "label": "Languages",
+      "items": ["TypeScript", "JavaScript (ES6+)", "Go"]
+    },
+    {
+      "label": "Frontend",
+      "items": ["React", "Next.js", "Redux Toolkit", "Tailwind CSS"]
+    },
+    {
+      "label": "Backend & APIs",
+      "items": ["Node.js", "Express", "REST APIs", "WebSockets"]
+    },
+    {
+      "label": "Data & Messaging",
+      "items": ["PostgreSQL", "Redis", "Kafka", "Prisma"]
+    },
+    {
+      "label": "Tools & Practice",
+      "items": ["Docker", "GitHub Actions", "Jest", "Playwright", "OpenTelemetry"]
+    }
+  ],
+  "experience": [
+    {
+      "title": "Software Engineer",
+      "org": "Harbor Systems",
+      "dates": "Jul 2023 – Present",
+      "place": "Berlin, Germany",
+      "points": [
+        {
+          "text": "Built the booking flow for a travel platform used by partner hotels, as one of four engineers.",
+          "allowed": ["React", "Node.js", "TypeScript", "REST APIs"],
+          "variants": [
+            {
+              "text": "Built the booking flow for a travel platform used by partner hotels with React, Node.js and REST APIs, as one of four engineers.",
+              "keys": ["REST APIs", "Node.js"]
+            }
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "Cut the booking page's load time from about 4.2 seconds to 1.8 by splitting the app and caching hotel data, together with the backend team.",
+          "allowed": ["performance", "caching", "code splitting", "Redis"],
+          "variants": [
+            {
+              "text": "Cut the booking page's load time from about 4.2 seconds to 1.8 by code splitting and caching hotel data in Redis, together with the backend team.",
+              "keys": ["code splitting", "Redis"]
+            }
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "Designed the retry and error screens so a failed payment never leaves a guest unsure whether they were charged.",
+          "allowed": ["React", "error handling"],
+          "variants": [],
+          "status": "confirmed"
+        },
+        {
+          "text": "Replaced polling with live availability updates, so a room that sells out disappears for other guests within seconds.",
+          "allowed": ["WebSockets", "real-time"],
+          "variants": [
+            {
+              "text": "Replaced polling with WebSocket updates, so a room that sells out disappears for other guests within seconds.",
+              "keys": ["WebSockets"]
+            }
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "Wrote the runbooks and dashboards the four-person team uses to watch bookings, so a failing payment provider is noticed within minutes instead of the next morning.",
+          "allowed": ["observability", "OpenTelemetry"],
+          "variants": [],
+          "status": "confirmed"
+        }
+      ]
+    },
+    {
+      "title": "Web Developer Intern",
+      "org": "Brightpath Digital",
+      "dates": "Jan 2023 – Jun 2023",
+      "place": "Berlin, Germany",
+      "points": [
+        {
+          "text": "Built responsive dashboards for the agency's clients with React and Tailwind CSS.",
+          "allowed": ["React", "Tailwind CSS", "responsive design"],
+          "variants": [],
+          "status": "confirmed"
+        },
+        {
+          "text": "Connected the dashboards to REST APIs with consistent loading and error states.",
+          "allowed": ["REST APIs", "React"],
+          "variants": [],
+          "status": "confirmed"
+        },
+        {
+          "text": "Split the dashboard code so each report loads only when opened.",
+          "allowed": ["code splitting", "lazy loading", "performance"],
+          "variants": [
+            {
+              "text": "Used code splitting and lazy loading so each report loads only when opened.",
+              "keys": ["code splitting", "lazy loading"]
+            }
+          ],
+          "status": "confirmed"
+        }
+      ]
+    },
+    {
+      "title": "Junior Web Developer",
+      "org": "Lakeside Studio",
+      "dates": "Jun 2022 – Dec 2022",
+      "place": "Hamburg, Germany",
+      "points": [
+        {
+          "text": "Rebuilt the studio client sites on a shared component library, so a design change reaches every site in one release instead of a week of copy and paste.",
+          "allowed": ["React", "design systems"],
+          "variants": [],
+          "status": "confirmed"
+        },
+        {
+          "text": "Added automated browser tests for the contact and checkout forms, which caught two broken releases before clients saw them.",
+          "allowed": ["Playwright", "testing"],
+          "variants": [],
+          "status": "confirmed"
+        },
+        {
+          "text": "Moved image delivery to a resizing service, cutting page weight on photo-heavy sites by about half.",
+          "allowed": ["performance", "images"],
+          "variants": [],
+          "status": "confirmed"
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "title": "Message Queue",
+      "stack": "Go, HTTP API",
+      "link": "github.com/example-alex/message-queue",
+      "points": [
+        {
+          "text": "Built a message queue with an HTTP API for publishing, claiming and acknowledging messages across named queues.",
+          "allowed": ["Go", "message queue", "HTTP API"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Leased each claimed message for a set time and requeued it if unacknowledged, so a stalled consumer's message is delivered again.",
+          "allowed": ["Go", "message queue", "retries"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Moved messages that failed three deliveries to a dead-letter list so they stop retrying, and exposed per-queue counts.",
+          "allowed": ["dead-letter queue", "message queue"],
+          "variants": [
+            {
+              "text": "Moved messages that failed three deliveries to a dead-letter queue (DLQ) so they stop retrying, and exposed per-queue counts.",
+              "keys": ["dead-letter queue", "DLQ"]
+            }
+          ],
+          "status": "from code"
+        }
+      ]
+    },
+    {
+      "title": "Team Chat",
+      "stack": "Next.js, React, Node.js, TypeScript, Redis, PostgreSQL",
+      "link": "github.com/example-alex/team-chat",
+      "live": "team-chat.example.com",
+      "points": [
+        {
+          "text": "Built a team chat app end to end, with channels, roles, invite links and direct messages.",
+          "allowed": ["Next.js", "React", "Node.js", "TypeScript", "full-stack"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Separated live delivery from saving, so the database can fall behind without slowing the live feed.",
+          "allowed": ["Redis", "PostgreSQL", "WebSockets", "real-time"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Made the storage worker pause and resume after a failed write instead of crash-looping on one bad message.",
+          "allowed": ["PostgreSQL", "error handling"],
+          "variants": [],
+          "status": "from code"
+        }
+      ]
+    },
+    {
+      "title": "Rate-Limited Gateway",
+      "stack": "Go, PostgreSQL, REST APIs",
+      "link": "github.com/example-alex/gateway",
+      "points": [
+        {
+          "text": "Built a gateway that routes each tenant's traffic to its services, with roles and API keys managed through an admin API.",
+          "allowed": ["Go", "multi-tenant", "API keys", "REST APIs", "PostgreSQL"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Applied rate limits separately to each tenant and paused requests to failing services before probing for recovery.",
+          "allowed": ["rate limiting", "circuit breaker", "Go"],
+          "variants": [
+            {
+              "text": "Applied rate limiting separately to each tenant and added a circuit breaker that pauses requests to failing services before probing for recovery.",
+              "keys": ["rate limiting", "circuit breaker"]
+            }
+          ],
+          "status": "from code"
+        },
+        {
+          "text": "Recorded API usage in the background, dropping and counting overflow instead of slowing requests down.",
+          "allowed": ["Go", "PostgreSQL", "analytics"],
+          "variants": [],
+          "status": "from code"
+        }
+      ]
+    },
+    {
+      "title": "Job Board Scraper",
+      "stack": "Go, PostgreSQL, Docker",
+      "link": "github.com/example-alex/job-scraper",
+      "points": [
+        {
+          "text": "Built a scraper that collects public job listings from several boards and stores each posting once, whichever board it came from.",
+          "allowed": ["Go", "PostgreSQL", "scraping"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Detected reposted listings by comparing company, title and location, so the same job is never shown twice with a new date.",
+          "allowed": ["Go", "deduplication"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Backed off automatically when a board slowed down, so the scraper stays polite and is never blocked for hammering a site.",
+          "allowed": ["Go", "rate limiting"],
+          "variants": [],
+          "status": "from code"
+        }
+      ]
+    },
+    {
+      "title": "Notes API",
+      "stack": "TypeScript, Express, Redis",
+      "link": "github.com/example-alex/notes-api",
+      "points": [
+        {
+          "text": "Built a notes service with sharing links, tags and full-text search behind a documented REST API for a small team.",
+          "allowed": ["TypeScript", "Express", "REST APIs"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Cached the most read notes and cleared the cache on every edit, so readers never see an old version of a note.",
+          "allowed": ["Redis", "caching"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Added per-user request limits and clear error messages so a script that misbehaves cannot slow the service for everyone else.",
+          "allowed": ["rate limiting", "error handling"],
+          "variants": [],
+          "status": "from code"
+        }
+      ]
+    },
+    {
+      "title": "Status Page",
+      "stack": "Next.js, Tailwind CSS, WebSockets",
+      "link": "github.com/example-alex/status-page",
+      "points": [
+        {
+          "text": "Built a public status page that shows the health of each service and updates live without a refresh.",
+          "allowed": ["Next.js", "WebSockets", "Tailwind CSS"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Kept the page readable when many services fail at once by grouping incidents instead of listing every alert.",
+          "allowed": ["React", "UX"],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Sent a short email when a service stays down for more than five minutes, and a second one when it recovers.",
+          "allowed": ["email", "alerting"],
+          "variants": [],
+          "status": "from code"
+        }
+      ]
+    }
+  ],
+  "preferences": {
+    "targetRoles": ["Software Engineer", "Backend Engineer", "Full Stack Engineer"],
+    "locations": ["Berlin", "Remote (Europe)"],
+    "acceptsRemote": true,
+    "salaryFloor": {
+      "amount": 60000,
+      "currency": "EUR",
+      "period": "year"
+    },
+    "noticePeriodDays": 30,
+    "workAuthorization": ["EU"],
+    "dealbreakers": ["on-call every week", "unpaid trial work"],
+    "excludedCompanies": ["Example Staffing Agency"],
+    "excludedIndustries": ["gambling"],
+    "seniority": ["junior", "mid"],
+    "experienceMonths": {
+      "fullTime": 28,
+      "internship": 6
+    }
+  },
+  "answerBank": [
+    {
+      "question": "What is your notice period?",
+      "kind": "factual",
+      "answer": "30 days.",
+      "approvedOn": "2026-01-15"
+    },
+    {
+      "question": "Are you authorised to work in the EU?",
+      "kind": "legal",
+      "answer": "Yes.",
+      "approvedOn": "2026-01-15"
+    }
+  ],
+  "neverUsed": ["An unfinished side project that is not defensible in an interview"]
+}
