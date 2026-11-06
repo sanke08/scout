@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import { Command, CommanderError } from "commander";
 import { registerCommands, type ApplicationOptions } from "./app/index.js";
+import { registerFoldersCommands } from "./app/index.js";
 import { ScoutError } from "./shared/index.js";
 
 /** Reads the version from package.json so there is one source of truth. */
@@ -39,6 +40,7 @@ export function buildProgram(overrides: ApplicationOptions = {}): Command {
     });
 
   registerCommands(program, overrides);
+  registerFoldersCommands(program, overrides);
   return program;
 }
 

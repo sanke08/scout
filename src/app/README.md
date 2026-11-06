@@ -42,6 +42,23 @@ The composition root, the command-line commands and the end-to-end tests. This i
 
 A `ScoutError` is printed as its message and sets the exit code from `src/shared/errors.ts` (for example 3 for not found, 7 for paused). A usage mistake keeps the parser's own message and exit code 1.
 
+## Job folders and operations commands
+
+Job folders (`<data folder>/jobs/`, the `folders` module) follow the store in one direction only: the store owns a job's status, `job.md` copies it. A job gets its folder the first time it becomes `shortlisted`, with the description saved word for word; each later status change sets `status` in `job.md` and adds a Log line. A job that was never shortlisted (found, or skipped by a rule) has no folder. This happens inside `application.jobStore.transition`, so every command that moves a job is covered. If the folder cannot be written, the store change stands and the failure is recorded in the action log as `folder-sync-failed`. `application.folders`, `application.syncJobFolder(id)` and `application.healthReport()` are available to commands; tests may pass `folders` to `createApplication`.
+
+| Command                                                     | What it does                                                                                                                                                                                    |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scout resume --job <jobId> [--keywords "a,b"] [--compile]` | Builds the resume from the job's skills plus any given keywords and saves `.tex` (and `.pdf`) in the job's folder; records `resume_tailored`; no status change. `--out` is refused with `--job` |
+| `scout board`                                               | Writes `jobs/BOARD.md` and prints the count per status and the total                                                                                                                            |
+| `scout status`                                              | Plain-text health report: pause flag, heartbeat, model calls used today (from `model-budget.json`), jobs by status, jobs needing you, boards watched                                            |
+| `scout backup --to DIR`                                     | Dated backup of profile, settings, database, `jobs/` and `project-notes/`; never sessions, `.env` files or links; DIR must be outside the data folder                                           |
+| `scout restore --from DIR [--overwrite]`                    | Restores a backup; refuses a data folder that already has files unless `--overwrite`                                                                                                            |
+| `scout leads add --from FILE [--source NAME]`               | Writes `leads/YYYY-MM-DD_<source>-roundN.md` from a JSON list of `{ company, role, link?, location?, experience?, listedSkills?, missing?, notes? }`                                            |
+| `scout leads list [--source NAME]`                          | Prints the newest leads file                                                                                                                                                                    |
+| `scout service plist [--program PATH]`                      | Prints the launchd property list on standard output and the manual install steps on standard error. Writes and loads nothing                                                                    |
+
+`backup`, `restore`, `leads` and `service` do not open the application (opening creates the database, which would make a restore into a fresh folder look non-empty).
+
 ## Data folder layout
 
 `SCOUT_DATA_DIR`, or `./data`. Git-ignored.

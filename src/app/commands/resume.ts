@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import type { Command } from "commander";
 import { compileResume } from "../../resume/index.js";
 import type { ApplicationOptions } from "../application.js";
+import { buildResumeForJob } from "./folders-resume.js";
 import { withApplication } from "./with-application.js";
 
 /** The options of the command as commander hands them over. */
@@ -18,6 +19,7 @@ interface ResumeCommandOptions {
   company?: string;
   compile?: boolean;
   out?: string;
+  job?: string;
 }
 
 /** Splits "a, b,c" into ["a", "b", "c"], dropping empty pieces. */
@@ -40,8 +42,16 @@ export function registerResume(program: Command, overrides: ApplicationOptions):
       "--out <folder>",
       "folder to write into (default: the resumes folder of your data folder)",
     )
+    .option(
+      "--job <jobId>",
+      "build for a stored job (its skills plus --keywords) and save into the job's folder",
+    )
     .action((options: ResumeCommandOptions) =>
       withApplication(overrides, async (application) => {
+        if (options.job !== undefined) {
+          await buildResumeForJob(application, options.job, options);
+          return;
+        }
         const profile = application.profileStore.load();
         const build = application.resumeBuilder.build(profile, splitKeywords(options.keywords), {
           ...(options.company === undefined ? {} : { company: options.company }),
