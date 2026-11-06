@@ -2,7 +2,8 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createFakeBrain } from "../brain/index.js";
+import { z } from "zod";
+import { createFakeBrain, type ProcessRunner } from "../brain/index.js";
 import { createApplication, COOLDOWN_DAYS } from "./application.js";
 import { makeNumberedPosting, makeTestApplication, type TestApplication } from "./test-helpers.js";
 
@@ -104,5 +105,34 @@ describe("createApplication", () => {
         application.settingsStore.load(),
       );
     expect(verdict.keep).toBe(false);
+  });
+
+  it("runs the real brain through the injected process runner, caches replies in the data folder and falls back to the other engine", async () => {
+    const commands: string[] = [];
+    const runner: ProcessRunner = async (command) => {
+      commands.push(command);
+      if (command === "claude") {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: "Claude usage limit reached. Your limit will reset at 5pm.",
+        };
+      }
+      return { exitCode: 0, stdout: JSON.stringify({ answer: 7 }), stderr: "" };
+    };
+    const test = makeTestApplication([], { processRunner: runner });
+    cleanups.push(test.cleanUp);
+    const request = {
+      task: "ask",
+      instructions: "Answer.",
+      schema: z.object({ answer: z.number() }),
+    };
+    const first = await test.application.brain().run(request);
+    expect(first).toMatchObject({ ok: true, engine: "codex", cached: false });
+    const second = await test.application.brain().run(request);
+    expect(second).toMatchObject({ ok: true, cached: true });
+    expect(commands).toEqual(["claude", "codex"]);
+    expect(existsSync(join(test.directory, "model-budget.json"))).toBe(true);
+    expect(existsSync(join(test.directory, "brain-cache"))).toBe(true);
   });
 });
