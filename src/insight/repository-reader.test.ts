@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ScoutError } from "../shared/index.js";
 import { readRepository } from "./repository-reader.js";
-import { copySampleRepository, makeScratchFolder } from "./test-helpers.js";
+import { copySampleRepository, makeScratchFolder } from "../../fixtures/insight/helpers.js";
 
 /** Lists every file path under `folder` with its size and modification time, for before/after checks. */
 function snapshot(folder: string, prefix = ""): string[] {

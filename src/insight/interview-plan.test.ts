@@ -176,6 +176,27 @@ describe("buildInterviewPlan without a brain", () => {
     expect(without.plan.rounds.map((round) => round.name)).toContain("Technical screen");
   });
 
+  it("treats a term only in an excluded point as a gap, and one only in a held point as profile-only", async () => {
+    const withPoint = (status: "excluded" | "hold"): Profile => ({
+      ...profile,
+      projects: [
+        ...profile.projects,
+        {
+          title: "Old Experiment",
+          stack: "Terraform",
+          points: [{ text: "Tried Terraform once.", allowed: ["Terraform"], variants: [], status }],
+        },
+      ],
+    });
+    const excluded = await buildInterviewPlan(baseInput({ profile: withPoint("excluded") }));
+    expect(excluded.plan.gaps.map((gap) => gap.term)).toContain("Terraform");
+    const held = await buildInterviewPlan(baseInput({ profile: withPoint("hold") }));
+    expect(held.plan.gaps.map((gap) => gap.term)).not.toContain("Terraform");
+    expect(held.plan.requirements.find((entry) => entry.term === "Terraform")?.coverage).toBe(
+      "profile-only",
+    );
+  });
+
   it("gives the same plan for the same input", async () => {
     const first = await buildInterviewPlan(baseInput());
     const second = await buildInterviewPlan(baseInput());

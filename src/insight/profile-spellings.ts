@@ -1,17 +1,19 @@
 /**
  * What the profile says the user has, as written, for the interview plan.
  *
- * Why: `termsOfProfile` lower-cases everything, which is right for matching but not for showing
- * "I have used RabbitMQ". This module keeps the written form, and separates "the profile has the
- * term at all" from "the user may use the term without asking" (confirmed and from-code points,
- * and skill rows).
+ * Why: the profile module's `termsOfProfile` lower-cases everything, which is right for matching but
+ * not for showing "I have used RabbitMQ". This module keeps the written form, and separates "the
+ * profile has the term" from "the user may use the term without asking" (confirmed and from-code
+ * points, and skill rows).
  */
-import { termsOfProfile } from "../profile/index.js";
 import { USABLE_POINT_STATUSES, type Profile } from "../shared/index.js";
 import { containsTerm } from "./text-match.js";
 
 /**
- * Every term the profile holds in any point or skill row, lower-cased term to written form.
+ * Every term the profile holds in a skill row or in a point that is not excluded, lower-cased term
+ * to written form. Terms found only in excluded points are left out on purpose: the user said
+ * never to use them, so a job asking for one is a gap to rehearse, not something the profile
+ * covers. Held and ask-first terms count as held (the plan only talks about them as "profile-only").
  * Example: a skill "Kafka" gives the entry `"kafka" -> "Kafka"`.
  */
 export function allProfileSpellings(profile: Profile): Map<string, string> {
@@ -23,17 +25,15 @@ export function allProfileSpellings(profile: Profile): Map<string, string> {
   }
   for (const entry of [...profile.experience, ...profile.projects]) {
     for (const point of entry.points) {
+      if (point.status === "excluded") {
+        continue;
+      }
       for (const term of point.allowed) {
         const key = term.trim().toLowerCase();
         if (!written.has(key)) {
           written.set(key, term.trim());
         }
       }
-    }
-  }
-  for (const key of termsOfProfile(profile)) {
-    if (!written.has(key)) {
-      written.set(key, key);
     }
   }
   return written;

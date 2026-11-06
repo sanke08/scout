@@ -32,8 +32,10 @@ const REQUIRED_MENTION_BONUS = 3;
 /** Weight of one mention in a "nice to have" sentence (a plain mention weighs 1). */
 const PREFERRED_MENTION_WEIGHT = 0.5;
 
-/** Weight added when the term is in the job title, and when the posting lists it as a skill. */
+/** Weight added when the term is in the job title. */
 const TITLE_BONUS = 2;
+
+/** Weight added when the posting lists the term in its skills list. */
 const LISTED_SKILL_BONUS = 2;
 
 /** Phrases that say a thing is asked for firmly. */

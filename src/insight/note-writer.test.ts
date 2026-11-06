@@ -7,7 +7,11 @@ import { ScoutError } from "../shared/index.js";
 import { noteFileName, writeProjectNote } from "./note-writer.js";
 import type { ProjectNoteReply } from "./note-schema.js";
 import { readRepository } from "./repository-reader.js";
-import { copySampleRepository, makeScratchFolder, sampleNoteReply } from "./test-helpers.js";
+import {
+  copySampleRepository,
+  makeScratchFolder,
+  sampleNoteReply,
+} from "../../fixtures/insight/helpers.js";
 
 /** A fixed time so the "read on" date in the note is the same every run. */
 const FIXED_TIME = new Date("2026-11-07T10:00:00Z");
