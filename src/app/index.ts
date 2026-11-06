@@ -19,3 +19,4 @@ export {
   DEGRADED_SHORTLIST_LIMIT,
   SCORING_CANDIDATES_PER_PASS,
 } from "./shortlist.js";
+export { registerFoldersCommands } from "./commands/folders-register.js";
