@@ -4,7 +4,7 @@ A small, local job-hunting pipeline. It keeps **one editable profile** of everyt
 
 Everything runs on your machine. The only AI is Claude Code or Codex, called from the command line on the subscription you already have. No other paid service, no API key.
 
-> **Status: early build (version 0.1).** The foundation and the first modules are being built in parallel. See [docs/PROGRESS.md](docs/PROGRESS.md) for what works today and what is not built yet. Nothing here submits an application on its own: you approve every one.
+> **Status: early build (version 0.1).** Every module exists and is tested with fakes. Nothing has been run against a real browser, mailbox or live application form yet: see [docs/PROGRESS.md](docs/PROGRESS.md) for exactly what works and what is unverified. Nothing here submits an application on its own: you approve every one.
 
 ## What it does
 
@@ -71,6 +71,11 @@ src/
   discovery/   job board fetchers, normaliser, dedupe, freshness
   decide/      hard rules and keyword ranking
   web/         local web page: Digest, Profile, Settings
+  app/         composition root and command-line commands
+  folders/     job folders, board table, leads, backups, health
+  insight/     reading your projects once, interview plans
+  tracking/    read-only mail, replies, follow-ups, alerts, funnel
+  apply/       form snapshot, mapping, dry-run engine, evidence
 fixtures/      fictional sample data used by tests (public)
 docs/          design, plan, progress, decisions, review checklist
 ```

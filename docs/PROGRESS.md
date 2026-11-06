@@ -4,7 +4,7 @@ Updated by the orchestrator when a branch is merged.
 
 ## Current
 
-Wave 0 (foundation) and wave 1 (seven modules) are merged on `main`. Wave 2 (wiring, apply, tracking, project insight, job folders) is in progress.
+Waves 0 to 2 are merged on `main` (all 12 modules). Wave 3 (wiring job folders, mail, notes, interview and apply into the command line) and an independent review are in progress.
 
 ## Phase status
 
@@ -26,9 +26,15 @@ Wave 0 (foundation) and wave 1 (seven modules) are merged on `main`. Wave 2 (wir
 | decide    | feat/decide    | merged |
 | web       | feat/web       | merged |
 
+- **2026-11-07 folders:** job folders, board table, leads, backups, health, launchd plist text. 621 tests at merge.
+- **2026-11-07 app:** composition root, ten commands, discovery pass with degraded mode, digest provider, end-to-end tests through the real entry point. 691 tests at merge; the built program was run for init, profile validate, resume, boards add, jobs, pause.
+- **2026-11-07 insight:** repository reader, project note writer, hold-only drafts, authored-commit filter, interview plan. 738 tests at merge. Not tried against a real model or real repository.
+- **2026-11-07 tracking:** read-only mail reader, rules classifier, matcher, follow-up drafts, alert parsers, funnel, recruiter contact helpers. 850 tests at merge after removing a test that opened a loopback socket. The IMAP connection and the alert formats are untested against real mail.
+- **2026-11-07 apply:** form snapshot, field mapping, dry-run engine, evidence, Playwright driver. 956 tests at merge. The Playwright driver has never run against a real browser; the form fixtures are fictional.
+
 ## Not built yet (not claimed to work)
 
-Being built in wave 2: CLI wiring and the end-to-end run, form adapters and applying, mailbox tracking and platform alerts, project reading and interview preparation, job folders, backups and health. Until they merge, none of them works.
+The modules for applying, mail tracking, project reading, interview preparation, job folders, backups and health exist and are tested with fakes, but are not yet reachable from the command line until wave 3 merges. Nothing has been run against a real browser, a real mailbox, a real model on a real repository, or a live application form.
 
 ## Done entries
 
