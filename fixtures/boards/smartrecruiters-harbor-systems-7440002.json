@@ -1,0 +1,26 @@
+{
+  "id": "7440002",
+  "name": "Site Reliability Engineer",
+  "postingUrl": "https://jobs.smartrecruiters.com/harbor-systems/7440002",
+  "applyUrl": "https://jobs.smartrecruiters.com/harbor-systems/7440002?oga=true",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": "<p>Harbor Systems makes software that moves containers through ports faster.</p>"
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": "<p>Keep our terminal software running around the clock. You will manage Kubernetes clusters on AWS, write Terraform, and improve alerts in Prometheus and Grafana.</p>"
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": "<ul><li>Experience running Linux services</li><li>Comfort being on call</li></ul>"
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": "<p>We offer 30 days of holiday and a learning budget.</p>"
+      }
+    }
+  }
+}

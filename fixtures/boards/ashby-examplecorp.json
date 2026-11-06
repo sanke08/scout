@@ -1,0 +1,62 @@
+{
+  "apiVersion": "1",
+  "jobs": [
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000001",
+      "title": "Sr. Backend Engineer",
+      "department": "Engineering",
+      "team": "Platform",
+      "employmentType": "FullTime",
+      "location": "Berlin",
+      "secondaryLocations": [],
+      "publishedAt": "2026-10-02T07:30:00.000+00:00",
+      "isListed": true,
+      "isRemote": false,
+      "workplaceType": "Hybrid",
+      "address": {
+        "postalAddress": {
+          "addressLocality": "Berlin",
+          "addressCountry": "Germany"
+        }
+      },
+      "jobUrl": "https://jobs.ashbyhq.com/examplecorp/a1b2c3d4-0000-4000-8000-000000000001",
+      "applyUrl": "https://jobs.ashbyhq.com/examplecorp/a1b2c3d4-0000-4000-8000-000000000001/application",
+      "descriptionHtml": "<p>Examplecorp builds scheduling software for clinics. We are hiring a Senior Backend Engineer to design and run the services behind our booking platform.</p><h3>What you will do</h3><ul><li>Design and build APIs in Node.js and TypeScript</li><li>Model data in PostgreSQL and keep queries fast</li><li>Run services on Kubernetes with Docker and Terraform</li><li>Review code and mentor other engineers</li></ul><h3>What we expect</h3><ul><li>Five years of backend experience</li><li>Comfort with distributed systems and on-call work</li><li>Clear written communication</li></ul><p>Salary: €85,000 - €105,000 per year. Hybrid: two days a week in our Berlin office. Apply on our careers page.</p>",
+      "descriptionPlain": ""
+    },
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000002",
+      "title": "Lead Data Engineer",
+      "department": "Data",
+      "team": "Data",
+      "employmentType": "FullTime",
+      "location": "Remote",
+      "secondaryLocations": [],
+      "publishedAt": "2026-10-15T07:30:00.000+00:00",
+      "isListed": true,
+      "isRemote": true,
+      "workplaceType": "Remote",
+      "jobUrl": "https://jobs.ashbyhq.com/examplecorp/a1b2c3d4-0000-4000-8000-000000000002",
+      "applyUrl": "https://jobs.ashbyhq.com/examplecorp/a1b2c3d4-0000-4000-8000-000000000002/application",
+      "descriptionHtml": "<p>Lead our data team. You will own pipelines built with Python, Airflow, Spark and dbt that land in Snowflake, set standards for testing data, and grow a team of four engineers. We care about lineage you can explain and dashboards nobody has to apologise for.</p><p>Fully remote.</p>",
+      "descriptionPlain": ""
+    },
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000003",
+      "title": "Engineering Manager",
+      "department": "Engineering",
+      "team": "Platform",
+      "employmentType": "FullTime",
+      "location": "Berlin",
+      "secondaryLocations": [],
+      "publishedAt": "2026-09-01T07:30:00.000+00:00",
+      "isListed": false,
+      "isRemote": false,
+      "workplaceType": "OnSite",
+      "jobUrl": "https://jobs.ashbyhq.com/examplecorp/a1b2c3d4-0000-4000-8000-000000000003",
+      "applyUrl": "https://jobs.ashbyhq.com/examplecorp/a1b2c3d4-0000-4000-8000-000000000003/application",
+      "descriptionHtml": "<p>Unlisted internal role.</p>",
+      "descriptionPlain": "Unlisted internal role."
+    }
+  ]
+}

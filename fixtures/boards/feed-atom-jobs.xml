@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Example Tech Hiring</title>
+  <link href="https://tech-hiring.example.net/"/>
+  <updated>2026-11-06T08:00:00Z</updated>
+  <id>https://tech-hiring.example.net/feed</id>
+  <entry>
+    <title>Sr. Backend Engineer at Examplecorp</title>
+    <link rel="alternate" href="https://tech-hiring.example.net/posts/4821#apply"/>
+    <id>https://tech-hiring.example.net/posts/4821</id>
+    <published>2026-10-03T10:00:00Z</published>
+    <updated>2026-10-03T10:00:00Z</updated>
+    <content type="html"><![CDATA[<p>Examplecorp builds scheduling software for clinics. We are hiring a Senior Backend Engineer to design and run the services behind our booking platform.</p><h3>What you will do</h3><ul><li>Design and build APIs in Node.js and TypeScript</li><li>Model data in PostgreSQL and keep queries fast</li><li>Run services on Kubernetes with Docker and Terraform</li><li>Review code and mentor other engineers</li></ul><h3>What we expect</h3><ul><li>Five years of backend experience</li><li>Comfort with distributed systems and on-call work</li><li>Clear written communication</li></ul><p>Salary: €85,000 - €105,000 per year. Hybrid: two days a week in our Berlin office. Apply on our careers page.</p><p>Posted by the Examplecorp hiring team.</p>]]></content>
+  </entry>
+  <entry>
+    <title>Platform Engineer at Northwind Labs</title>
+    <link href="https://tech-hiring.example.net/posts/4822"/>
+    <id>https://tech-hiring.example.net/posts/4822</id>
+    <updated>2026-11-05T10:00:00Z</updated>
+    <summary>Run our wind farm data platform on Kubernetes with Terraform and Go-free tooling. Hybrid in Hamburg.</summary>
+  </entry>
+</feed>

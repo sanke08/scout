@@ -1,0 +1,89 @@
+{
+  "jobs": [
+    {
+      "id": 4001001,
+      "internal_job_id": 3301,
+      "title": "Senior Backend Engineer",
+      "updated_at": "2026-10-20T08:15:00-04:00",
+      "first_published": "2026-10-01T09:00:00-04:00",
+      "requisition_id": "EC-101",
+      "location": {
+        "name": "Berlin, Germany"
+      },
+      "absolute_url": "https://boards.greenhouse.io/examplecorp/jobs/4001001?gh_src=abc123&utm_source=linkedin",
+      "company_name": "Examplecorp",
+      "content": "&lt;p&gt;Examplecorp builds scheduling software for clinics. We are hiring a Senior Backend Engineer to design and run the services behind our booking platform.&lt;/p&gt;&lt;h3&gt;What you will do&lt;/h3&gt;&lt;ul&gt;&lt;li&gt;Design and build APIs in Node.js and TypeScript&lt;/li&gt;&lt;li&gt;Model data in PostgreSQL and keep queries fast&lt;/li&gt;&lt;li&gt;Run services on Kubernetes with Docker and Terraform&lt;/li&gt;&lt;li&gt;Review code and mentor other engineers&lt;/li&gt;&lt;/ul&gt;&lt;h3&gt;What we expect&lt;/h3&gt;&lt;ul&gt;&lt;li&gt;Five years of backend experience&lt;/li&gt;&lt;li&gt;Comfort with distributed systems and on-call work&lt;/li&gt;&lt;li&gt;Clear written communication&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;Salary: €85,000 - €105,000 per year. Hybrid: two days a week in our Berlin office. Apply on our careers page.&lt;/p&gt;",
+      "departments": [
+        {
+          "id": 1,
+          "name": "Engineering"
+        }
+      ],
+      "offices": [
+        {
+          "id": 2,
+          "name": "Berlin"
+        }
+      ]
+    },
+    {
+      "id": 4001002,
+      "internal_job_id": 3302,
+      "title": "Product Designer",
+      "updated_at": "2026-10-25T10:00:00-04:00",
+      "first_published": "2026-10-12T10:00:00-04:00",
+      "requisition_id": "EC-102",
+      "location": {
+        "name": "Remote - Europe"
+      },
+      "absolute_url": "https://boards.greenhouse.io/examplecorp/jobs/4001002",
+      "company_name": "Examplecorp",
+      "content": "&lt;p&gt;Examplecorp is looking for a Product Designer to shape how clinics book appointments. You will own research, flows and visual design in Figma, and work closely with engineers who build in React and TypeScript.&lt;/p&gt;&lt;h3&gt;What you will do&lt;/h3&gt;&lt;ul&gt;&lt;li&gt;Run interviews with clinic staff and patients&lt;/li&gt;&lt;li&gt;Design flows and prototypes in Figma&lt;/li&gt;&lt;li&gt;Ship polished interfaces together with engineering&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;This is a fully remote role open to candidates across Europe.&lt;/p&gt;",
+      "pay_input_ranges": [
+        {
+          "min_cents": 6500000,
+          "max_cents": 8000000,
+          "currency_type": "EUR",
+          "title": "Europe",
+          "blurb": "Yearly range"
+        }
+      ],
+      "departments": [
+        {
+          "id": 3,
+          "name": "Design"
+        }
+      ],
+      "offices": []
+    },
+    {
+      "id": 4001003,
+      "internal_job_id": 3303,
+      "title": "Software Engineering Intern",
+      "updated_at": "2026-10-28T10:00:00-04:00",
+      "first_published": "2026-10-28T10:00:00-04:00",
+      "requisition_id": "EC-103",
+      "location": {
+        "name": "Berlin, Germany"
+      },
+      "absolute_url": "https://boards.greenhouse.io/examplecorp/jobs/4001003",
+      "company_name": "Examplecorp",
+      "content": "&lt;p&gt;A six month internship in our engineering team. You will pair with senior engineers, write tests, fix bugs and build a small feature in Python and Django against a PostgreSQL database. We teach you our review process and how we run services in production. You should be studying computer science or a related subject and be curious about how real systems behave when they fail.&lt;/p&gt;&lt;p&gt;The internship is on-site in our Berlin office.&lt;/p&gt;",
+      "departments": [
+        {
+          "id": 1,
+          "name": "Engineering"
+        }
+      ],
+      "offices": [
+        {
+          "id": 2,
+          "name": "Berlin"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "total": 3
+  }
+}

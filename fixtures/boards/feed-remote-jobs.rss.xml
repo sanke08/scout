@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example Remote Jobs</title>
+    <link>https://remote-jobs.example.com</link>
+    <description>Remote and hybrid jobs, updated daily.</description>
+    <item>
+      <title>Examplecorp: Senior Backend Engineer</title>
+      <link>https://remote-jobs.example.com/jobs/senior-backend-engineer-examplecorp?utm_source=rss&utm_medium=feed</link>
+      <guid isPermaLink="false">https://remote-jobs.example.com/jobs/senior-backend-engineer-examplecorp?utm_source=rss&utm_medium=feed</guid>
+      <pubDate>Fri, 02 Oct 2026 09:00:00 GMT</pubDate>
+      <description><![CDATA[<p>Examplecorp builds scheduling software for clinics. We are hiring a Senior Backend Engineer to design and run the services behind our booking platform.</p><h3>What you will do</h3><ul><li>Design and build APIs in Node.js and TypeScript</li><li>Model data in PostgreSQL and keep queries fast</li><li>Run services on Kubernetes with Docker and Terraform</li><li>Review code and mentor other engineers</li></ul><h3>What we expect</h3><ul><li>Five years of backend experience</li><li>Comfort with distributed systems and on-call work</li><li>Clear written communication</li></ul><p>Salary: €85,000 - €105,000 per year. Hybrid: two days a week in our Berlin office. Apply on our careers page.</p>]]></description>
+    </item>
+    <item>
+      <title>Northwind Labs: Frontend Developer</title>
+      <link>https://remote-jobs.example.com/jobs/frontend-developer-northwind-labs</link>
+      <guid isPermaLink="false">https://remote-jobs.example.com/jobs/frontend-developer-northwind-labs</guid>
+      <pubDate>Mon, 26 Oct 2026 09:00:00 GMT</pubDate>
+      <description><![CDATA[<p>Northwind Labs is a small team that builds dashboards for wind farm operators. We are looking for a Frontend Developer who is happy with React, TypeScript and CSS and cares about accessible interfaces. You will build charts and tables, write tests with Vitest and talk to users regularly. This is a fully remote role and we work across time zones in Europe.</p>]]></description>
+    </item>
+    <item>
+      <title>Quick Hire Ltd: Data Entry Assistant</title>
+      <link>https://remote-jobs.example.com/jobs/data-entry-assistant-quick-hire</link>
+      <guid isPermaLink="false">https://remote-jobs.example.com/jobs/data-entry-assistant-quick-hire</guid>
+      <pubDate>Thu, 05 Nov 2026 09:00:00 GMT</pubDate>
+      <description><![CDATA[<p>Earn money from home. No experience needed. To start, pay a small registration fee for your starter kit. Then contact our manager on WhatsApp. Send your CV to quickhire.jobs@gmail.com.</p>]]></description>
+    </item>
+  </channel>
+</rss>

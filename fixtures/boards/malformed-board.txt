@@ -1,0 +1,1 @@
+{"jobs": [ {"id": 1, "title": "Broken posting", "absolute_url": "https://boards.greenhouse.io/examplecorp/jobs/1", "content": "<p>Cut off in the mid

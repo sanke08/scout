@@ -1,0 +1,40 @@
+{
+  "name": "Harbor Systems",
+  "description": "Harbor Systems makes port logistics software.",
+  "jobs": [
+    {
+      "title": "Customer Support Specialist",
+      "shortcode": "HS01A2B3",
+      "code": "",
+      "employment_type": "Full-time",
+      "telecommuting": false,
+      "department": "Support",
+      "url": "https://apply.workable.com/j/HS01A2B3",
+      "shortlink": "https://apply.workable.com/j/HS01A2B3",
+      "application_url": "https://apply.workable.com/j/HS01A2B3/apply",
+      "published_on": "2026-10-18",
+      "created_at": "2026-10-17",
+      "country": "Netherlands",
+      "city": "Rotterdam",
+      "state": "South Holland",
+      "description": "<p>Help port operators get the most from Harbor Systems. You answer questions by email and chat, reproduce problems with our engineers and write help articles. You need a patient manner, clear writing and fluent English and Dutch. Experience with SQL is a plus because you will look up shipment records.</p><p>On-site in Rotterdam.</p>"
+    },
+    {
+      "title": "Junior QA Engineer",
+      "shortcode": "HS04D5E6",
+      "code": "",
+      "employment_type": "Full-time",
+      "telecommuting": true,
+      "department": "Engineering",
+      "url": "https://apply.workable.com/j/HS04D5E6",
+      "shortlink": "https://apply.workable.com/j/HS04D5E6",
+      "application_url": "https://apply.workable.com/j/HS04D5E6/apply",
+      "published_on": "2026-10-29",
+      "created_at": "2026-10-28",
+      "country": "Netherlands",
+      "city": "",
+      "state": "",
+      "description": "<p>Test our shipment tracking apps before they reach customers. You will write automated tests with Playwright and Cypress, report bugs clearly and help engineers reproduce them. You are early in your career and want to learn how quality is built into a team. Remote within the European Union.</p>"
+    }
+  ]
+}
