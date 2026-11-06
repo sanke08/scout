@@ -9,6 +9,7 @@ import {
   smartRecruitersUrl,
 } from "./smartrecruiters.js";
 
+/** The fixed "now" every test uses, so output is deterministic. */
 const NOW = new Date("2026-11-07T09:00:00.000Z");
 
 /** Reads a saved board response from `fixtures/boards/`. */

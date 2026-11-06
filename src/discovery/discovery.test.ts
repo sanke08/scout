@@ -10,6 +10,7 @@ import { dedupePostings } from "./dedupe.js";
 import { closedSince } from "./freshness.js";
 import { describeFlag } from "./flags.js";
 
+/** The fixed "now" every test uses, so output is deterministic. */
 const NOW = new Date("2026-11-07T09:00:00.000Z");
 
 /** Where each board address is served from: a saved file under `fixtures/boards/`. */

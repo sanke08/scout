@@ -30,12 +30,13 @@ import {
 const discovery = createDiscovery(); // real fetch; pass { fetchImpl } in tests
 const board = detectBoard("https://boards.greenhouse.io/examplecorp/jobs/123");
 // { kind: "greenhouse", token: "examplecorp" }
+if (!board) throw new Error("Not a known board address.");
 
 const now = new Date();
-const postings = await discovery.fetchBoard(board!, now);
+const postings = await discovery.fetchBoard(board, now);
 const unique = dedupePostings([...postings, ...otherBoardPostings]);
 const closed = closedSince(yesterdaysPostings, postings); // each flagged "closed"
-for (const flag of unique[0]!.flags) console.log(describeFlag(flag));
+for (const flag of unique[0]?.flags ?? []) console.log(describeFlag(flag));
 ```
 
 Exports: `createDiscovery`, `detectBoard`, `dedupePostings`, `closedSince`, `markReposts`, `describeFlag`, `ghostReasons`, `scamReasons`, `suspiciousTextReasons`, `canonicalizeUrl`, `postingIdFromUrl`, and the flag name constants.
@@ -53,8 +54,6 @@ Errors are `ScoutError`: `invalid-input` (malformed JSON/XML, oversize body, bad
 | `closed`          | The posting is no longer on its board.                                       |
 
 ## Glossary
-
-Define each term of this module once here; code and comments use the short form.
 
 - **Board**: a company's public job list on applicant-tracking software (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee) or an RSS/Atom feed.
 - **Token**: the company's name on a board, such as `examplecorp` in `boards.greenhouse.io/examplecorp`. For a feed, the token is the feed address.

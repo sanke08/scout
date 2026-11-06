@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Posting } from "../shared/index.js";
 import { closedSince, markReposts } from "./freshness.js";
 
+/** The fixed "now" every test uses, so output is deterministic. */
 const NOW = new Date("2026-11-07T09:00:00.000Z");
 
 /** Builds a healthy posting for a job address; tests override fields. */

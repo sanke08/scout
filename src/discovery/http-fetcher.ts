@@ -13,7 +13,7 @@ export type FetchImplementation = (url: string, init?: RequestInit) => Promise<R
 /** The name Scout gives to every board it contacts. */
 export const DEFAULT_USER_AGENT = "scout-job-pipeline (personal use)";
 
-/** Seconds a board may take to answer before Scout gives up (in milliseconds). */
+/** How long a board may take to answer before Scout gives up: 20 seconds, in milliseconds. */
 export const DEFAULT_TIMEOUT_MILLISECONDS = 20_000;
 
 /** The largest response body Scout accepts: 5 megabytes. */

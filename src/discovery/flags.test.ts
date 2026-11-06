@@ -13,6 +13,7 @@ import {
   withFlags,
 } from "./flags.js";
 
+/** The fixed "now" every test uses, so output is deterministic. */
 const NOW = new Date("2026-11-07T09:00:00.000Z");
 
 /** A healthy posting: recent, long description, names skills. Tests change one field at a time. */

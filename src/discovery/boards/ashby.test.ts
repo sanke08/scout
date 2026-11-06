@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ashbyUrl, parseAshby } from "./ashby.js";
 
+/** The fixed "now" every test uses, so output is deterministic. */
 const NOW = new Date("2026-11-07T09:00:00.000Z");
 
 /** Reads a saved board response from `fixtures/boards/`. */

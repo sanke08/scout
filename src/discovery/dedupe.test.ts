@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Posting } from "../shared/index.js";
 import { dedupePostings, descriptionSimilarity } from "./dedupe.js";
 
+/** A realistic description, long enough for the similarity layer to compare. */
 const LONG_TEXT =
   "We build booking software for clinics and need an engineer who designs services in Node.js, models data in PostgreSQL, runs workloads on Kubernetes and mentors colleagues. You bring five years of backend experience and write clearly. The team reviews every change together and shares on-call fairly.";
 
