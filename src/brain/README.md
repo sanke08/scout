@@ -42,16 +42,16 @@ if (!result.ok) {
 }
 ```
 
-| Export                                                                           | What it is                                                                                             |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `createCommandBrain({ engine, runner?, now?, configuration? })`                  | Runs one engine as a command; remembers a reported limit until its reset time.                         |
-| `createBrainRouter({ primary, fallback?, budget, cache, profileVersion, now? })` | Cache, then budget, then primary, then fallback. Returns a failure value at once when none can answer. |
-| `createFakeBrain(recordedReplies, name?)`                                        | A real, selectable `Brain` that replays recorded replies; used by tests across the project.            |
-| `createDailyBudget` / `createFileDailyBudget`                                    | Calls allowed per UTC day, in memory or kept in a file between runs.                                   |
-| `createMemoryCache` / `createFileCache`                                          | Reply cache, in memory or one JSON file per key in a folder (atomic writes).                           |
-| `buildPrompt`, `detectLimit`, `extractFirstJson`                                 | The prompt builder, the usage-limit detector and the JSON finder.                                      |
-| `checkClaims`, `claimRetryInstructions`, `proposeWording`                        | The claim check and the wording proposal built on it (scenario F).                                     |
-| `createProcessRunner`, `ENGINE_CONFIGURATIONS`                                   | The real process runner (timeout, output cap) and the per-engine command and flags.                    |
+| Export                                                                                        | What it is                                                                                             |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `createCommandBrain({ engine, runner?, now?, configuration?, unknownResetCooldownMinutes? })` | Runs one engine as a command; remembers a reported limit until its reset time.                         |
+| `createBrainRouter({ primary, fallback?, budget, cache, profileVersion, now? })`              | Cache, then budget, then primary, then fallback. Returns a failure value at once when none can answer. |
+| `createFakeBrain(recordedReplies, name?)`                                                     | A real, selectable `Brain` that replays recorded replies; used by tests across the project.            |
+| `createDailyBudget` / `createFileDailyBudget`                                                 | Calls allowed per UTC day, in memory or kept in a file between runs.                                   |
+| `createMemoryCache` / `createFileCache`                                                       | Reply cache, in memory or one JSON file per key in a folder (atomic writes).                           |
+| `buildPrompt`, `detectLimit`, `extractFirstJson`                                              | The prompt builder, the usage-limit detector and the JSON finder.                                      |
+| `checkClaims`, `claimRetryInstructions`, `proposeWording`                                     | The claim check and the wording proposal built on it (scenario F).                                     |
+| `createProcessRunner`, `ENGINE_CONFIGURATIONS`                                                | The real process runner (timeout, output cap) and the per-engine command and flags.                    |
 
 Rules the module keeps:
 
@@ -68,6 +68,7 @@ The exact flags of the Claude Code and Codex tools are **ASSUMPTIONS**, written 
 - Claude Code: `claude -p <prompt>` prints the reply as plain text and exits.
 - Codex: `codex exec --sandbox read-only --skip-git-repo-check <prompt>` runs one prompt and exits.
 - The wording of "usage limit" and reset-time messages (`limit-detection.ts`) is also an assumption.
+- The prompt is passed as one command-line argument, which can hit the operating system's argument length limit for very large batches; the runner already accepts standard input, so a switch is a small change.
 - Nothing here switches off the tools' own abilities to read or edit files; check the tools' options for that and add the flag in `engines.ts` if needed.
 
 If a flag is wrong, the tool exits with an error and Scout reports "unavailable"; pass `configuration` to `createCommandBrain` to change the command or flags without editing this module.

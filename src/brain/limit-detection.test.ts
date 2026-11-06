@@ -1,6 +1,8 @@
+/** Tests for `detectLimit`: ordinary output, each reset-time form, both output streams. */
 import { describe, expect, it } from "vitest";
 import { detectLimit } from "./limit-detection.js";
 
+/** Fixed clock so relative reset times are predictable. */
 const now = new Date("2026-11-07T10:00:00.000Z");
 
 describe("detectLimit", () => {

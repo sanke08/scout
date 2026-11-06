@@ -1,10 +1,13 @@
+/** Tests for the memory and file caches, including reopening and damaged files. */
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFileCache, createMemoryCache } from "./cache.js";
 
+/** Temporary folders created by a test, removed afterwards. */
 const folders: string[] = [];
+/** Creates an empty temporary folder for one test. */
 async function makeFolder(): Promise<string> {
   const folder = await mkdtemp(join(tmpdir(), "scout-brain-cache-"));
   folders.push(folder);

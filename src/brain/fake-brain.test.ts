@@ -1,7 +1,9 @@
+/** Tests for `createFakeBrain`: replay order, task matching, validation, limits, running out. */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createFakeBrain } from "./fake-brain.js";
 
+/** Reply shape and a request builder shared by the fake-brain tests. */
 const schema = z.object({ score: z.number() });
 const request = (task: string) => ({ task, instructions: "Score.", schema });
 

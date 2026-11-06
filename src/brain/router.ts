@@ -87,19 +87,19 @@ export function createBrainRouter(options: BrainRouterOptions): Brain {
   const engines = options.fallback ? [options.primary, options.fallback] : [options.primary];
   const inFlight = new Map<string, Promise<BrainResult<unknown>>>();
 
-  const readCache = async <T>(
-    key: string,
-    request: BrainRequest<T>,
-  ): Promise<BrainResult<T> | undefined> => {
+  /**
+   * Looks the key up. The key includes the schema description, so a stored value under the same key
+   * was produced by this schema; it is returned as is (re-checking would wrongly reject schemas that
+   * transform their input, because a stored value is the schema's output, not its input).
+   */
+  const readCache = async <T>(key: string): Promise<BrainResult<T> | undefined> => {
     const stored = await options.cache.get(key);
     if (!stored) return undefined;
-    const checked = request.schema.safeParse(stored.value);
-    if (!checked.success) return undefined;
-    return { ok: true, value: checked.data, engine: stored.engine, cached: true };
+    return { ok: true, value: stored.value as T, engine: stored.engine, cached: true };
   };
 
   const runUncached = async <T>(key: string, request: BrainRequest<T>): Promise<BrainResult<T>> => {
-    const hit = await readCache(key, request);
+    const hit = await readCache<T>(key);
     if (hit) return hit;
 
     const failures: BrainFailure[] = [];

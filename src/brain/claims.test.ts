@@ -1,6 +1,8 @@
+/** Tests for the claim check: extraction, support rules, scenario F and the retry text. */
 import { describe, expect, it } from "vitest";
 import { checkClaims, claimRetryInstructions, extractClaims } from "./claims.js";
 
+/** The profile facts the text is checked against (fictional). */
 const support = {
   allowedTerms: ["Kafka", "Go", "mentoring"],
   knownFacts: [
@@ -10,6 +12,7 @@ const support = {
   ],
 };
 
+/** Lists claims as "kind:text" strings for easy comparison. */
 function claimTexts(text: string): string[] {
   return extractClaims(text).map((claim) => `${claim.kind}:${claim.text}`);
 }

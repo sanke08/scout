@@ -1,9 +1,11 @@
+/** Tests for the daily budget: cap, midnight UTC reset, give-back, simultaneous takes, file persistence. */
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDailyBudget, createFileDailyBudget, nextUtcMidnight } from "./budget.js";
 
+/** Temporary folders created by a test, removed afterwards. */
 const folders: string[] = [];
 afterEach(async () => {
   await Promise.all(

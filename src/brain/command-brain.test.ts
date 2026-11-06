@@ -1,9 +1,11 @@
+/** Tests for `createCommandBrain` with a scripted runner: retry, limits, unavailable, fenced JSON. */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createCommandBrain } from "./command-brain.js";
 import { ENGINE_CONFIGURATIONS } from "./engines.js";
 import type { ProcessResult, ProcessRunner } from "./process-runner.js";
 
+/** Reply shape and request used by every command-brain test. */
 const schema = z.object({ score: z.number() });
 const request = { task: "score", instructions: "Score the job.", schema };
 
@@ -24,6 +26,7 @@ function scriptedRunner(results: Array<ProcessResult | Error>): {
   return { runner, calls };
 }
 
+/** A successful run printing `{"score": N}`. */
 const good = (score: number): ProcessResult => ({
   stdout: JSON.stringify({ score }),
   stderr: "",

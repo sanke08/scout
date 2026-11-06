@@ -1,3 +1,4 @@
+/** Tests for `createBrainRouter`: cache, budget, fallback and degraded mode. */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { Brain, BrainRequest, BrainResult } from "../shared/index.js";
@@ -9,6 +10,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+/** Reply shape, request and clock shared by the router tests. */
 const schema = z.object({ score: z.number() });
 const request: BrainRequest<{ score: number }> = {
   task: "score",
@@ -31,6 +33,7 @@ function countingEngine(name: string): Brain & { calls: number } {
   return engine;
 }
 
+/** Builds a router with an in-memory cache and budget around the given engines. */
 function makeRouter(primary: Brain, extra: { fallback?: Brain; limitPerDay?: number } = {}) {
   return createBrainRouter({
     primary,
@@ -95,18 +98,20 @@ describe("router cache", () => {
     expect(engine.calls).toBe(1);
   });
 
-  it("ignores a cached value that no longer matches the schema", async () => {
-    const engine = countingEngine("claude");
-    const cache = createMemoryCache();
-    await cache.set(buildCacheKey(request, 1), { engine: "claude", value: { score: "stale" } });
-    const router = createBrainRouter({
-      primary: engine,
-      budget: createDailyBudget({ limitPerDay: 5, now: fixedNow }),
-      cache,
-      profileVersion: 1,
-      now: fixedNow,
-    });
-    expect(await router.run(request)).toMatchObject({ ok: true, cached: false });
+  it("caches replies of schemas that transform their input", async () => {
+    const transformed = z.object({ score: z.string().transform(Number) });
+    const engine = {
+      name: "claude",
+      calls: 0,
+      async run<T>(): Promise<BrainResult<T>> {
+        engine.calls += 1;
+        return { ok: true, value: { score: 7 } as T, engine: "claude", cached: false };
+      },
+    };
+    const router = makeRouter(engine);
+    await router.run({ ...request, schema: transformed });
+    const second = await router.run({ ...request, schema: transformed });
+    expect(second).toMatchObject({ ok: true, cached: true, value: { score: 7 } });
     expect(engine.calls).toBe(1);
   });
 

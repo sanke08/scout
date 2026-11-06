@@ -1,7 +1,9 @@
+/** Tests for `proposeWording`: blocked claim, retry, give-up, brain failure. */
 import { describe, expect, it } from "vitest";
 import { createFakeBrain } from "./fake-brain.js";
 import { proposeWording } from "./wording.js";
 
+/** A fictional profile point used by every wording test. */
 const point = { text: "Mentored two juniors", allowed: ["mentoring", "Kafka"] };
 
 describe("proposeWording", () => {

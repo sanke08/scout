@@ -1,3 +1,4 @@
+/** Tests for the real process runner, using the Node program itself (no network, no model). */
 import { describe, expect, it } from "vitest";
 import { createProcessRunner } from "./process-runner.js";
 

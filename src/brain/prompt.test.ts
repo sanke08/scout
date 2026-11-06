@@ -1,7 +1,9 @@
+/** Tests for `buildPrompt`: instruction-like untrusted text can never change the instructions section. */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { buildPrompt } from "./prompt.js";
 
+/** A small reply shape used by every prompt test. */
 const schema = z.object({ score: z.number() });
 
 /** Everything before the line that opens the untrusted block: the part only Scout writes. */

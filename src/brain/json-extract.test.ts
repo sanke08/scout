@@ -1,3 +1,4 @@
+/** Tests for `extractFirstJson`: plain, fenced, array, brace-in-string, prose braces, nothing found. */
 import { describe, expect, it } from "vitest";
 import { extractFirstJson } from "./json-extract.js";
 
