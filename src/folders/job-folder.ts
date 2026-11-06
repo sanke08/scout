@@ -158,6 +158,7 @@ export function createJobFolderManager(options: JobFolderManagerOptions): JobFol
     return found;
   }
 
+  /** Finds a folder by job id or link, or by company and role when a link is unknown. */
   function findJobFolder(job: Posting | JobRecord): string | undefined {
     const candidates = existingJobs();
     const sameJob = candidates.find(
@@ -198,6 +199,7 @@ export function createJobFolderManager(options: JobFolderManagerOptions): JobFol
     }
   }
 
+  /** Reuses the job's folder if there is one; otherwise creates it and writes job.md once. */
   function ensureJobFolder(
     job: Posting | JobRecord,
     extra: EnsureJobFolderOptions = {},
@@ -231,6 +233,7 @@ export function createJobFolderManager(options: JobFolderManagerOptions): JobFol
     return { name, path: folderPath(name), created: true };
   }
 
+  /** Reads and parses a folder's job.md; a file with no front matter is an error. */
   function readJob(folderName: string): ParsedFrontMatter {
     const parsed = parseFrontMatter(readFileSync(jobFilePath(folderName), "utf8"));
     if (parsed === undefined) {
@@ -242,6 +245,7 @@ export function createJobFolderManager(options: JobFolderManagerOptions): JobFol
     return parsed;
   }
 
+  /** Validates the patch (status must be known) and rewrites only the front-matter lines. */
   function updateFrontMatter(
     folderName: string,
     patch: Partial<Record<JobFieldKey, string>>,
@@ -262,6 +266,7 @@ export function createJobFolderManager(options: JobFolderManagerOptions): JobFol
     writeTextAtomic(file, patchFrontMatter(readFileSync(file, "utf8"), cleanPatch));
   }
 
+  /** Adds `- <UTC time>: <text>` as a new last line of job.md. */
   function appendLogLine(folderName: string, text: string): void {
     const file = jobFilePath(folderName);
     const current = readFileSync(file, "utf8");
@@ -269,6 +274,7 @@ export function createJobFolderManager(options: JobFolderManagerOptions): JobFol
     writeTextAtomic(file, current.endsWith("\n") ? current + line : `${current}\n${line}`);
   }
 
+  /** Changes the status, stamps the applied date the first time, and logs the reason. */
   function setStatus(folderName: string, status: JobStatus, reason: string): void {
     const fields = readJob(folderName).fields;
     const patch: Partial<Record<JobFieldKey, string>> = { status };
@@ -279,6 +285,7 @@ export function createJobFolderManager(options: JobFolderManagerOptions): JobFol
     appendLogLine(folderName, `Status is now ${status}: ${reason}`);
   }
 
+  /** Replaces one section's body, found by its heading and the heading that follows it. */
   function writeSection(folderName: string, title: JobSectionTitle, text: string): void {
     if (title === "Job description" || title === "Log") {
       throw new ScoutError(
@@ -310,6 +317,7 @@ export function createJobFolderManager(options: JobFolderManagerOptions): JobFol
     writeTextAtomic(file, rewritten.join("\n"));
   }
 
+  /** Writes the .tex (and copies the .pdf) named after the stem, then records and logs it. */
   function saveTailoredResume(folderName: string, resume: TailoredResume): string[] {
     if (!RESUME_STEM_PATTERN.test(resume.fileStem)) {
       throw new ScoutError(
@@ -330,6 +338,7 @@ export function createJobFolderManager(options: JobFolderManagerOptions): JobFol
     return saved;
   }
 
+  /** Copies the exact PDF into sent/ under its own file name, then records and logs it. */
   function recordResumeSent(folderName: string, pdfPath: string): string {
     const fileName = assertSafeName(basename(pdfPath), "resume file name");
     if (
