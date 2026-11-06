@@ -65,9 +65,11 @@ export const SCHEMA_UPGRADE_STEPS: readonly SchemaUpgradeStep[] = [
     apply(database) {
       database.exec(`
         ALTER TABLE jobs ADD COLUMN ever_submitted INTEGER NOT NULL DEFAULT 0;
-        UPDATE jobs SET ever_submitted = 1 WHERE status IN
-          ('submitting', 'applied', 'contacted', 'interviewing', 'offer', 'rejected',
-           'withdrawn', 'unverified');
+        UPDATE jobs SET ever_submitted = 1
+          WHERE status IN ('submitting', 'applied', 'contacted', 'interviewing', 'offer',
+                           'rejected', 'withdrawn', 'unverified')
+             OR previous_status = 'submitting'
+             OR id IN (SELECT job_id FROM action_log WHERE detail LIKE '% -> submitting:%');
       `);
     },
   },

@@ -35,8 +35,8 @@ function dayKey(date: Date): string {
 }
 
 /**
- * Counts the jobs that moved to `applied` today, from the action log (the store writes
- * `submitting -> applied: reason` for every such move).
+ * Counts the jobs that moved to `applied` or `unverified` today (both mean a submit may have been
+ * sent), from the action log (the store writes `submitting -> applied: reason` for every move).
  * Example: two entries `submitting -> applied: ...` stamped today and one stamped yesterday give 2.
  */
 export function countAppliedToday(actionLog: ActionLog, now: Date): number {
@@ -46,7 +46,7 @@ export function countAppliedToday(actionLog: ActionLog, now: Date): number {
     .filter(
       (entry) =>
         entry.action === "transition" &&
-        /^[a-z-]+ -> applied: /.test(entry.detail) &&
+        /^[a-z-]+ -> (applied|unverified): /.test(entry.detail) &&
         dayKey(new Date(entry.at)) === today,
     ).length;
 }

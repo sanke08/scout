@@ -174,11 +174,16 @@ describe("scout apply at level Fill, I submit", () => {
   });
 
   it("records applied only when the page shows a confirmation after the user's own submit", async () => {
+    let looks = 0;
     const made = world({
       settings: FILL,
       wrapDriver: (driver) => ({
         ...driver,
-        readConfirmation: async () => "Thank you for applying! Your application has been received.",
+        // The form page shows nothing at first; the confirmation appears after the user submits.
+        readConfirmation: async () => {
+          looks += 1;
+          return looks === 1 ? "" : "Thank you for applying! Your application has been received.";
+        },
       }),
     });
     const result = await made.run(["apply", "job-1"]);
@@ -188,6 +193,19 @@ describe("scout apply at level Fill, I submit", () => {
     const confirmation = readFileSync(join(made.evidenceDirectory, "confirmation.txt"), "utf8");
     expect(confirmation).toMatch(/Thank you for applying/);
     expect(existsSync(join(made.evidenceDirectory, "screenshot-before-submit.png"))).toBe(true);
+  });
+
+  it("does not treat confirmation-like text already on the form page as a confirmation", async () => {
+    const made = world({
+      settings: FILL,
+      wrapDriver: (driver) => ({
+        ...driver,
+        readConfirmation: async () => "Thank you for applying! Your application has been received.",
+      }),
+    });
+    const result = await made.run(["apply", "job-1", "--wait", "1"]);
+    expect(result.exitCode).toBe(0);
+    expect(statusOf(made)).toBe("unverified");
   });
 
   it("records unverified, not applied, when no confirmation is seen in time", async () => {

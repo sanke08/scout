@@ -42,8 +42,13 @@ export type PostingSource = z.infer<typeof postingSourceSchema>;
 
 /** The schema that checks one posting. Use it to validate data from files, the web page or a model. */
 export const postingSchema = z.object({
-  /** Stable id: a hash of the canonical URL (see discovery module). */
-  id: z.string(),
+  /**
+   * Stable id: a hash of the canonical URL (see discovery module). Limited to letters, digits,
+   * dashes and underscores so it is always safe to use in a file name or folder name.
+   */
+  id: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,64}$/, "A posting id may only use letters, digits, - and _."),
   company: z.string(),
   title: z.string(),
   location: z.string(),

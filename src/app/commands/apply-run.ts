@@ -293,15 +293,24 @@ async function waitForConfirmation(
   environment: ApplyEnvironment,
   timeoutSeconds: number,
 ): Promise<string | undefined> {
-  let waitedMilliseconds = 0;
-  for (;;) {
-    let text = "";
+  const readPageText = async (): Promise<string> => {
     try {
-      text = await driver.readConfirmation();
+      return await driver.readConfirmation();
     } catch {
       // The page may be between two loads; look again on the next round.
+      return "";
     }
-    if (looksLikeConfirmation(text)) return text;
+  };
+  // Text already on the form before the user submits (for example a banner saying "your
+  // application has been received" on a re-opened form) must never count as a confirmation.
+  const textBeforeSubmit = await readPageText();
+  const alreadyLooksConfirmed = looksLikeConfirmation(textBeforeSubmit);
+  let waitedMilliseconds = 0;
+  for (;;) {
+    const text = await readPageText();
+    if (looksLikeConfirmation(text) && (!alreadyLooksConfirmed || text !== textBeforeSubmit)) {
+      return text;
+    }
     if (waitedMilliseconds >= timeoutSeconds * 1000) return undefined;
     await environment.pause(POLL_MILLISECONDS);
     waitedMilliseconds += POLL_MILLISECONDS;
@@ -354,7 +363,7 @@ async function waitForUserSubmit(
 ): Promise<void> {
   if (context.waitSeconds === 0) {
     console.log(
-      "The form is filled. Not waiting (--wait 0), so the job is unchanged; if you submit it yourself, check the confirmation and your email.",
+      "The form is filled. Not waiting (--wait 0): the browser window closes now and the job is unchanged. Nothing was submitted.",
     );
     return;
   }
@@ -368,7 +377,7 @@ async function waitForUserSubmit(
     jobStore.transition(
       id,
       "approved",
-      "You submitted the form yourself in the open browser window, so it is recorded as approved.",
+      "The form was filled and left open for you to submit, so the job is recorded as approved to track the outcome.",
     );
   }
   jobStore.transition(

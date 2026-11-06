@@ -322,3 +322,29 @@ describe("the digest's approve, skip and undo moves", () => {
     expect(store.transition("posting-1", "shortlisted", "undo").status).toBe("shortlisted");
   });
 });
+
+describe("the schema 2 upgrade step on a database written by schema 1", () => {
+  it("marks jobs that were mid-submit, including needs-you and failed ones", async () => {
+    const { SCHEMA_UPGRADE_STEPS, upgradeDatabase } = await import("./schema.js");
+    const old = new (await import("./sqlite-module.js")).DatabaseSync(":memory:");
+    upgradeDatabase(old, SCHEMA_UPGRADE_STEPS.slice(0, 1));
+    const insertJob = old.prepare(
+      "INSERT INTO jobs (id, status, previous_status, status_reason, company, updated_at, posting_json) VALUES (?, ?, ?, 'r', 'c', '2026-01-01', '{}')",
+    );
+    insertJob.run("needs-you-from-submitting", "needs-you", "submitting");
+    insertJob.run("failed-after-submitting", "failed", null);
+    insertJob.run("plain-found", "found", null);
+    old
+      .prepare(
+        "INSERT INTO action_log (at, actor, action, job_id, detail) VALUES ('2026-01-01', 'store', 'transition', 'failed-after-submitting', 'submitting -> failed: x'), ('2026-01-01', 'store', 'transition', 'failed-after-submitting', 'approved -> submitting: y')",
+      )
+      .run();
+    upgradeDatabase(old, SCHEMA_UPGRADE_STEPS);
+    const flag = (id: string): unknown =>
+      old.prepare("SELECT ever_submitted FROM jobs WHERE id = ?").get(id)?.["ever_submitted"];
+    expect(flag("needs-you-from-submitting")).toBe(1);
+    expect(flag("failed-after-submitting")).toBe(1);
+    expect(flag("plain-found")).toBe(0);
+    old.close();
+  });
+});

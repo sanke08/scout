@@ -8,11 +8,11 @@ All waves are merged on `main`: 12 modules, wired into the command line. An inde
 
 ## Phase status
 
-| Phase                           | Status      |
-| ------------------------------- | ----------- |
-| Wave 0: foundation              | done        |
-| Wave 1: seven modules           | in progress |
-| Wave 2: wiring, apply, tracking | not started |
+| Phase                                          | Status        |
+| ---------------------------------------------- | ------------- |
+| Wave 0: foundation                             | done          |
+| Wave 1: seven modules                          | done (merged) |
+| Wave 2: app, apply, tracking, insight, folders | done (merged) |
 
 ## Module status
 

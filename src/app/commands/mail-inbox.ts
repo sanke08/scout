@@ -143,6 +143,9 @@ async function readInbox(
   application: Application,
   options: { since?: string; folder?: string },
 ): Promise<void> {
+  // Reading mail also moves job statuses (an interview invite becomes `interviewing`), so the kill
+  // switch applies here too.
+  application.assertNotPaused();
   const credentials = readMailCredentials(application.environment);
   const since = parseSince(options.since, application.now());
   const folder = options.folder ?? DEFAULT_MAIL_FOLDER;
