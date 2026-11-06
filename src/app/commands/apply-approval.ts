@@ -17,13 +17,13 @@ import { withApplication } from "./with-application.js";
 const DEFAULT_SKIP_TAG = "Not interested";
 
 /**
- * Where `undo` puts a job back, by its current status: an approved job returns to `resume-ready`
- * and a skipped job returns to `found`, the only steps back the state machine allows.
- * Example: undoing an `approved` job gives `resume-ready`.
+ * Where `undo` puts a job back, by its current status. As on the Digest page, an approved or a
+ * skipped job goes back to `shortlisted`, the state it was chosen from.
+ * Example: undoing an `approved` job gives `shortlisted`.
  */
 const UNDO_TARGETS: Partial<Record<JobStatus, JobStatus>> = {
-  approved: "resume-ready",
-  skipped: "found",
+  approved: "shortlisted",
+  skipped: "shortlisted",
 };
 
 /**

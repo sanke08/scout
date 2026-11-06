@@ -58,11 +58,11 @@ describe("scout approve, skip and undo", () => {
   });
 
   it("gives the store's full sentence for a move that is not allowed, and changes nothing", async () => {
-    const made = world({ jobStatus: "shortlisted" });
+    const made = world({ jobStatus: "found" });
     const result = await made.run(["approve", "job-1"]);
     expect(result.exitCode).toBe(4);
-    expect(allOutput(result)).toMatch(/cannot move from shortlisted to approved/);
-    expect(statusOf(made)).toBe("shortlisted");
+    expect(allOutput(result)).toMatch(/cannot move from found to approved/);
+    expect(statusOf(made)).toBe("found");
   });
 
   it("reports an unknown job with the not-found exit code", async () => {
@@ -91,13 +91,14 @@ describe("scout approve, skip and undo", () => {
     expect(statusOf(made)).toBe("applied");
   });
 
-  it("undoes an approval and a skip with the store's reverse moves", async () => {
+  it("undoes an approval and a skip by returning the job to shortlisted, as the Digest page does", async () => {
     const made = world({ jobStatus: "approved" });
     await made.run(["undo", "job-1"]);
-    expect(statusOf(made)).toBe("resume-ready");
+    expect(statusOf(made)).toBe("shortlisted");
     await made.run(["skip", "job-1"]);
+    expect(statusOf(made)).toBe("skipped");
     await made.run(["undo", "job-1"]);
-    expect(statusOf(made)).toBe("found");
+    expect(statusOf(made)).toBe("shortlisted");
   });
 
   it("returns a job that needed you to where it came from", async () => {
