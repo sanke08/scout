@@ -77,6 +77,18 @@ Registered by `registerMailAndNotesCommands` (one line in `src/index.ts`). Scout
 
 **Tests** inject a fake mailbox through `ApplicationOptions.mailboxConnector` and a plain object through `ApplicationOptions.environment`; see `test/mail-notes.e2e.test.ts`.
 
+## Apply commands
+
+| Command                                                                         | What it does                                                                                                                                                              |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scout approve <jobId>`                                                         | `resume-ready` to `approved`. Makes the job eligible; never submits.                                                                                                      |
+| `scout skip <jobId> [--tag TAG]`                                                | Skips a job that was not submitted yet; the tag (default "Not interested") is the recorded reason.                                                                        |
+| `scout undo <jobId>`                                                            | `approved` back to `resume-ready`, `skipped` back to `found`, `needs-you` back to where it came from.                                                                     |
+| `scout apply <jobId> [--url URL] [--dry-run] [--profile-dir DIR] [--wait SECS]` | Kill switch, plan, then the board's level (Settings): Prepare stages only (no browser); Fill opens a visible browser and you press submit; Automatic needs a typed `yes`. |
+| `scout apply self-test <fixtureOrUrl> [--board KIND] [--profile-file FILE]`     | A dry run on a saved page or stable posting; records the result in `board-runs.json`.                                                                                     |
+
+Rules the commands keep: the kill switch is checked first; a job must be `resume-ready` or `approved` (a job left in `submitting` is refused and never retried); at Automatic the summary is shown and only a typed `yes` allows the final click (there is no flag that answers for you); a board whose latest self-test failed is held at Fill, I submit; the resume comes from the job folder's tailored PDF, else it is built and compiled into `resumes/` (a missing `pdflatex` is reported and stops the command); evidence goes to `<jobs>/<job folder>/evidence/`, else `evidence/<job id>/`; after you press submit in Fill, `applied` is recorded only when the page shows a confirmation, otherwise `unverified` (`--wait 0` skips waiting and leaves the job unchanged). `board-runs.json` (`{ "schemaVersion": 1, "boards": { "greenhouse": { "cleanDryRuns": 1, "lastCleanRunAt": "...", "lastFailedAt": "..." } } }`) is app-owned; it changes only after a clean dry run or a self-test. The real browser path is untested against a real browser; the tests use the apply module's fake driver.
+
 ## Data folder layout
 
 `SCOUT_DATA_DIR`, or `./data`. Git-ignored.
