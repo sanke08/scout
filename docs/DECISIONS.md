@@ -47,3 +47,31 @@ Status: accepted
 Context: Claude Code and Codex are called as commands and their output is text.
 Choice: Every request carries a zod schema; invalid output is retried once, then returned as a failure value. Posting text is passed in a separate `untrustedText` field.
 Consequences: Callers must handle `ok: false` and degrade; the model can never trigger an action.
+
+## D-007 (2026-11-07): A submitted job can never be skipped
+
+Status: accepted
+Context: `skipped` can be undone to `found`, so skipping an applied job and undoing would let it be applied for again.
+Choice: `applied`, `contacted`, `interviewing`, `offer` and `unverified` cannot move to `skipped`; use `withdrawn` or `closed`.
+Consequences: The digest's skip action only applies to jobs before `submitting`.
+
+## D-008 (2026-11-07): Cooldown and blacklist enter through `createDecider(context)`
+
+Status: accepted
+Context: The shared `Decider` port has three arguments and no room for recent applications or a blacklist.
+Choice: Pass them to `createDecider({ blacklist, cooldown })`; the port stays unchanged.
+Consequences: Callers must build the decider with that context; wiring does this.
+
+## D-009 (2026-11-07): Model engines are called with tools off
+
+Status: accepted
+Context: Scout needs text and JSON from Claude Code and Codex, never file edits.
+Choice: Claude runs with `--tools ""` and `--no-session-persistence`; Codex runs with `--sandbox read-only`. Flags verified against the installed tools on 2026-11-07.
+Consequences: If the tools change their flags, only `src/brain/engines.ts` changes.
+
+## D-010 (2026-11-07): Live feed formats are checked by a smoke script, not in tests
+
+Status: accepted
+Context: Parsers were written from fixtures; real feeds can differ.
+Choice: `npm run smoke:discovery` fetches real public boards and is never part of `npm test`. The body size cap is 25 MiB.
+Consequences: Workable and Recruitee are unchecked against live feeds until a real token is tried.
