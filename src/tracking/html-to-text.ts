@@ -22,12 +22,14 @@ const BLOCK_SELECTOR =
  * Failure: never throws; text with no markup comes back trimmed.
  */
 export function emailHtmlToText(rawHtml: string): string {
-  const document = load(rawHtml, null, false);
-  document("script, style, noscript, template, head").remove();
+  // A browser treats every run of white space in HTML as one space; only tags make line breaks.
+  const document = load(rawHtml.replace(/\s+/g, " "), null, false);
+  document("script, style, noscript, template, head, title").remove();
   document("a[href]").each((_index, element) => {
     const address = document(element).attr("href") ?? "";
     if (/^https?:\/\//i.test(address)) {
-      document(element).append(` <${address}>`);
+      // `.text()` stores the address as plain text, so the angle brackets are not read as a tag.
+      document(element).append(document("<span></span>").text(` <${address}>`));
     }
   });
   document("br").replaceWith("\n");
@@ -37,7 +39,7 @@ export function emailHtmlToText(rawHtml: string): string {
   return document
     .root()
     .text()
-    .replace(/ /g, " ")
+    .replace(/\u00a0/g, " ")
     .split("\n")
     .map((line) => line.replace(/[ \t]+/g, " ").trim())
     .join("\n")
