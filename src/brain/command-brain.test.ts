@@ -12,12 +12,12 @@ const request = { task: "score", instructions: "Score the job.", schema };
 /** A fake runner that answers with the given results in order and records each call. */
 function scriptedRunner(results: Array<ProcessResult | Error>): {
   runner: ProcessRunner;
-  calls: Array<{ command: string; args: readonly string[] }>;
+  calls: Array<{ command: string; args: readonly string[]; input: string }>;
 } {
-  const calls: Array<{ command: string; args: readonly string[] }> = [];
+  const calls: Array<{ command: string; args: readonly string[]; input: string }> = [];
   const remaining = [...results];
-  const runner: ProcessRunner = async (command, args) => {
-    calls.push({ command, args });
+  const runner: ProcessRunner = async (command, args, input) => {
+    calls.push({ command, args, input });
     const next = remaining.shift();
     if (next === undefined) throw new Error("The test script ran out of replies.");
     if (next instanceof Error) throw next;
@@ -45,6 +45,7 @@ describe("createCommandBrain", () => {
     });
     expect(calls[0]?.command).toBe("claude");
     expect(calls[0]?.args[0]).toBe("-p");
+    expect(calls[0]?.input).toContain("score");
   });
 
   it("uses the codex command and arguments for the codex engine", async () => {
@@ -68,8 +69,8 @@ describe("createCommandBrain", () => {
     const result = await createCommandBrain({ engine: "claude", runner }).run(request);
     expect(result).toMatchObject({ ok: false, reason: "invalid-output" });
     expect(calls).toHaveLength(2);
-    expect(calls[1]?.args[1]).toContain("CORRECTION: Your previous reply was rejected.");
-    expect(calls[1]?.args[1]).toContain("score");
+    expect(calls[1]?.input).toContain("CORRECTION: Your previous reply was rejected.");
+    expect(calls[1]?.input).toContain("score");
   });
 
   it("accepts a valid retry after an invalid first reply", async () => {
@@ -168,8 +169,25 @@ describe("createCommandBrain", () => {
   it("reports unavailable for the real runner when the program is missing", async () => {
     const brain = createCommandBrain({
       engine: "claude",
-      configuration: { command: "scout-no-such-program-xyz", buildArguments: (prompt) => [prompt] },
+      configuration: { command: "scout-no-such-program-xyz", buildArguments: () => [] },
     });
     expect(await brain.run(request)).toMatchObject({ ok: false, reason: "unavailable" });
+  });
+});
+
+describe("the prompt travels on standard input", () => {
+  it("is not placed in the program's arguments, so a large request cannot hit the argument limit", async () => {
+    const { runner, calls } = scriptedRunner([good(2)]);
+    await createCommandBrain({ engine: "claude", runner }).run(request);
+    expect(calls[0]?.args.join(" ")).not.toContain("score");
+    expect(calls[0]?.input.length).toBeGreaterThan(0);
+  });
+
+  it("refuses a request larger than the cap without starting the program", async () => {
+    const { runner, calls } = scriptedRunner([good(2)]);
+    const huge = { ...request, untrustedText: "x".repeat(1_100_000) };
+    const result = await createCommandBrain({ engine: "claude", runner }).run(huge);
+    expect(result.ok).toBe(false);
+    expect(calls).toHaveLength(0);
   });
 });

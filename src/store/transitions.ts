@@ -25,16 +25,24 @@ import type { JobStatus } from "../shared/index.js";
  */
 export const ALLOWED_TRANSITIONS: Readonly<Record<JobStatus, readonly JobStatus[]>> = {
   found: ["shortlisted", "needs-you", "failed", "skipped", "closed"],
-  shortlisted: ["resume-ready", "needs-you", "failed", "skipped", "closed"],
+  shortlisted: ["resume-ready", "approved", "needs-you", "failed", "skipped", "closed"],
   "resume-ready": ["approved", "needs-you", "failed", "skipped", "closed"],
-  approved: ["submitting", "resume-ready", "needs-you", "failed", "skipped", "closed"],
+  approved: [
+    "submitting",
+    "resume-ready",
+    "shortlisted",
+    "needs-you",
+    "failed",
+    "skipped",
+    "closed",
+  ],
   submitting: ["applied", "unverified", "needs-you", "failed"],
   applied: ["contacted", "interviewing", "rejected", "withdrawn", "closed"],
   contacted: ["interviewing", "offer", "rejected", "withdrawn", "closed"],
   interviewing: ["offer", "rejected", "withdrawn", "closed"],
   offer: ["rejected", "withdrawn", "closed"],
   rejected: [],
-  skipped: ["found", "closed"],
+  skipped: ["found", "shortlisted", "closed"],
   "needs-you": ["skipped", "closed", "failed"],
   unverified: [
     "contacted",

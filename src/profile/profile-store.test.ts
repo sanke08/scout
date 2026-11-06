@@ -149,3 +149,21 @@ describe("profile store", () => {
     expect(readFileSync(path, "utf8")).toBe(newer);
   });
 });
+
+describe("saving a variant that uses a term the point does not allow", () => {
+  it("is refused, so the Profile page cannot bypass the rule", () => {
+    const directory = mkdtempSync(join(tmpdir(), "scout-profile-variant-"));
+    try {
+      const store = createProfileStore(join(directory, "profile.json"));
+      const profile = structuredClone(sampleProfile());
+      profile.experience[0]!.points[0]!.variants.push({
+        text: "Built the booking flow with Kubernetes.",
+        keys: ["Kubernetes"],
+      });
+      expect(() => store.save(profile)).toThrowError(/Kubernetes/);
+      expect(store.exists()).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});

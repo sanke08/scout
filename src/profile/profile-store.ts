@@ -17,6 +17,7 @@ import {
   refuseNewerSchema,
   writeJsonAtomically,
 } from "./json-file.js";
+import { assertProfileVariantsAllowed } from "./points.js";
 
 /** The newest `schemaVersion` of the profile file this code understands. */
 const SUPPORTED_SCHEMA_VERSION = profileSchema.shape.schemaVersion.value;
@@ -87,6 +88,7 @@ export function createProfileStore(path: string): ProfileStore {
 
     save(profile: Profile): Profile {
       const checked = parseProfile(profile, "the profile being saved");
+      assertProfileVariantsAllowed(checked);
       const onDisk = readProfileFile(path);
       if (onDisk === undefined) {
         const first = { ...checked, version: checked.version + 1 };

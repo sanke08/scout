@@ -17,9 +17,8 @@ Template followed: the owner's plan-and-build template, version 1.8, adapted for
 
 Goals, non-goals and scenarios A to P are in [IDEA.md](IDEA.md) (sections 4 and 6). In this repository:
 
-- **Built in wave 1:** shared contracts, store, profile, resume, brain, discovery, decide, web.
-- **Built in wave 2:** CLI wiring, project reading, end-to-end tests, form adapters (apply), tracking, platform alerts.
-- **Not built yet:** launchd service, backups, interview preparation. They are listed in [PROGRESS.md](PROGRESS.md) and are not claimed to work.
+- **Built:** shared contracts, store, profile, resume, brain, discovery, decide, web, app (commands), folders, insight, tracking, apply, and the command-line wiring of all of them.
+- **Not verified yet:** anything that needs a real browser, mailbox, live form or real model on a real repository. [PROGRESS.md](PROGRESS.md) lists exactly what was and was not run.
 
 ## Architecture
 

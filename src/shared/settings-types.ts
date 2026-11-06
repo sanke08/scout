@@ -7,12 +7,15 @@ import { z } from "zod";
 
 /** When Scout applies. `approve` is the default and the safest. */
 export const applyModeSchema = z.enum(["approve", "auto", "prepare"]);
+/** The TypeScript type of one validated apply mode, inferred from its schema. */
 export type ApplyMode = z.infer<typeof applyModeSchema>;
 
 /** How much Scout does on one job board: Prepare only, Fill I submit, or Automatic. */
 export const boardLevelSchema = z.enum(["prepare", "fill", "auto"]);
+/** The TypeScript type of one validated board level, inferred from its schema. */
 export type BoardLevel = z.infer<typeof boardLevelSchema>;
 
+/** The schema that checks one settings. Use it to validate data from files, the web page or a model. */
 export const settingsSchema = z.object({
   applyMode: applyModeSchema,
   /** Fill forms and stop before submitting until a board has a clean record. */
@@ -33,6 +36,7 @@ export const settingsSchema = z.object({
   /** The kill switch: stops submitting and form filling now. Finding and scoring continue. */
   automationPaused: z.boolean(),
 });
+/** The TypeScript type of one validated settings, inferred from its schema. */
 export type Settings = z.infer<typeof settingsSchema>;
 
 /** Safe defaults: wait for approval, never automatic, nothing paused. */

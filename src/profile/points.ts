@@ -121,6 +121,19 @@ function assertVariantsAllowed(point: Point): void {
 }
 
 /**
+ * Throws `invalid-input` when any alternate wording anywhere in the profile uses a job term its
+ * point does not list as allowed. The store calls this on every save, so the Profile page (which
+ * saves the whole profile) cannot bypass the rule that `addVariant` and `updatePoint` enforce.
+ */
+export function assertProfileVariantsAllowed(profile: Profile): void {
+  for (const entry of [...profile.experience, ...profile.projects]) {
+    for (const point of entry.points) {
+      assertVariantsAllowed(point);
+    }
+  }
+}
+
+/**
  * Returns a copy of `items` where the item at `index` is replaced by `change(item)`.
  * Throws `invalid-input` with `what` in the sentence when the index does not exist.
  */

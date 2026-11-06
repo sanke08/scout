@@ -58,6 +58,19 @@ export const SCHEMA_UPGRADE_STEPS: readonly SchemaUpgradeStep[] = [
       `);
     },
   },
+  {
+    version: 2,
+    summary:
+      "Remember which jobs were ever submitted, so a submitted job can never be skipped or re-opened.",
+    apply(database) {
+      database.exec(`
+        ALTER TABLE jobs ADD COLUMN ever_submitted INTEGER NOT NULL DEFAULT 0;
+        UPDATE jobs SET ever_submitted = 1 WHERE status IN
+          ('submitting', 'applied', 'contacted', 'interviewing', 'offer', 'rejected',
+           'withdrawn', 'unverified');
+      `);
+    },
+  },
 ];
 
 /** The newest schema version this code understands. */

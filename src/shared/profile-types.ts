@@ -25,6 +25,7 @@ export const pointStatusSchema = z.enum([
   "hold",
   "excluded",
 ]);
+/** The TypeScript type of one validated point status, inferred from its schema. */
 export type PointStatus = z.infer<typeof pointStatusSchema>;
 
 /** Statuses a resume may use without asking. */
@@ -38,6 +39,7 @@ export const variantSchema = z.object({
   text: z.string(),
   keys: z.array(z.string()),
 });
+/** The TypeScript type of one validated variant, inferred from its schema. */
 export type Variant = z.infer<typeof variantSchema>;
 
 /** One experience or project statement, stored once. */
@@ -48,6 +50,7 @@ export const pointSchema = z.object({
   variants: z.array(variantSchema),
   status: pointStatusSchema,
 });
+/** The TypeScript type of one validated point, inferred from its schema. */
 export type Point = z.infer<typeof pointSchema>;
 
 /** One job in the work history. */
@@ -59,6 +62,7 @@ export const experienceEntrySchema = z.object({
   place: z.string(),
   points: z.array(pointSchema),
 });
+/** The TypeScript type of one validated experience entry, inferred from its schema. */
 export type ExperienceEntry = z.infer<typeof experienceEntrySchema>;
 
 /** One personal or open-source project. */
@@ -71,6 +75,7 @@ export const projectEntrySchema = z.object({
   note: z.string().optional(),
   points: z.array(pointSchema),
 });
+/** The TypeScript type of one validated project entry, inferred from its schema. */
 export type ProjectEntry = z.infer<typeof projectEntrySchema>;
 
 /** One row of technical skills, e.g. label "Languages", items ["TypeScript", "Go"]. */
@@ -78,8 +83,10 @@ export const skillRowSchema = z.object({
   label: z.string(),
   items: z.array(z.string()),
 });
+/** The TypeScript type of one validated skill row, inferred from its schema. */
 export type SkillRow = z.infer<typeof skillRowSchema>;
 
+/** The schema that checks one identity. Use it to validate data from files, the web page or a model. */
 export const identitySchema = z.object({
   name: z.string(),
   location: z.string(),
@@ -89,14 +96,17 @@ export const identitySchema = z.object({
   linkedin: z.string().optional(),
   portfolio: z.string().optional(),
 });
+/** The TypeScript type of one validated identity, inferred from its schema. */
 export type Identity = z.infer<typeof identitySchema>;
 
+/** The schema that checks one education. Use it to validate data from files, the web page or a model. */
 export const educationSchema = z.object({
   degree: z.string(),
   dates: z.string(),
   school: z.string(),
   grade: z.string().optional(),
 });
+/** The TypeScript type of one validated education, inferred from its schema. */
 export type Education = z.infer<typeof educationSchema>;
 
 /** What the user wants and will not accept; used by the hard-rule filters. */
@@ -118,6 +128,7 @@ export const preferencesSchema = z.object({
   /** Months of full-time and internship work, kept apart and never double counted. */
   experienceMonths: z.object({ fullTime: z.number(), internship: z.number() }),
 });
+/** The TypeScript type of one validated preferences, inferred from its schema. */
 export type Preferences = z.infer<typeof preferencesSchema>;
 
 /** Kinds of recurring form question. Legal, demographic and salary are never guessed. */
@@ -129,6 +140,7 @@ export const answerKindSchema = z.enum([
   "demographic",
   "salary",
 ]);
+/** The TypeScript type of one validated answer kind, inferred from its schema. */
 export type AnswerKind = z.infer<typeof answerKindSchema>;
 
 /** An approved answer to a recurring form question. Only approved entries are used silently. */
@@ -139,6 +151,7 @@ export const answerEntrySchema = z.object({
   /** ISO date (YYYY-MM-DD) the user approved this answer. */
   approvedOn: z.string(),
 });
+/** The TypeScript type of one validated answer entry, inferred from its schema. */
 export type AnswerEntry = z.infer<typeof answerEntrySchema>;
 
 /** The whole profile. `version` goes up by one on every saved change. */
@@ -158,4 +171,5 @@ export const profileSchema = z.object({
   /** Items kept out of every resume, shown on the Profile view as a locked list. */
   neverUsed: z.array(z.string()),
 });
+/** The TypeScript type of one validated profile, inferred from its schema. */
 export type Profile = z.infer<typeof profileSchema>;

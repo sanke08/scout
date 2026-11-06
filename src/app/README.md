@@ -1,6 +1,6 @@
 # app
 
-The composition root, the command-line commands and the end-to-end tests. This is the only place that opens the data folder and joins the seven modules; every other module takes its dependencies as arguments.
+The composition root, the command-line commands and the end-to-end tests. This is the only place that opens the data folder and joins the modules; every other module takes its dependencies as arguments.
 
 **Owner:** the `app` agent, branch `feat/app`. Only `src/app/`, `src/index.ts`, `src/index.test.ts` and `test/` change in its branch.
 

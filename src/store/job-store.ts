@@ -16,6 +16,15 @@ import type { DatabaseSync } from "./sqlite-module.js";
 import { runInTransaction } from "./transaction.js";
 import { assertTransitionAllowed } from "./transitions.js";
 
+/** Statuses a job that was ever submitted can never return to (it may already have been sent). */
+const REOPENING_STATUSES: readonly JobStatus[] = [
+  "found",
+  "shortlisted",
+  "resume-ready",
+  "approved",
+  "skipped",
+];
+
 /** The stored columns of one job, as read back from the database. */
 interface StoredJob {
   posting: Posting;
@@ -237,12 +246,31 @@ export function createJobStore(
           );
         }
         assertTransitionAllowed(stored.status, to, stored.previousStatus);
+        const submittedRow = database
+          .prepare("SELECT ever_submitted FROM jobs WHERE id = ?")
+          .get(id);
+        const everSubmitted = submittedRow?.["ever_submitted"] === 1;
+        if (everSubmitted && REOPENING_STATUSES.includes(to)) {
+          // A job that reached `submitting` once may have been sent. Moving it back to a status
+          // before submitting (or skipping it) could let the same application be sent twice.
+          throw new ScoutError(
+            "illegal-transition",
+            `A job cannot move from ${stored.status} to ${to} because it was already submitted once. Use withdrawn or closed instead.`,
+          );
+        }
         const previousToKeep = to === "needs-you" ? stored.status : null;
         database
           .prepare(
-            "UPDATE jobs SET status = ?, previous_status = ?, status_reason = ?, updated_at = ? WHERE id = ?",
+            "UPDATE jobs SET status = ?, previous_status = ?, status_reason = ?, updated_at = ?, ever_submitted = ? WHERE id = ?",
           )
-          .run(to, previousToKeep, reason, now().toISOString(), id);
+          .run(
+            to,
+            previousToKeep,
+            reason,
+            now().toISOString(),
+            everSubmitted || to === "submitting" ? 1 : 0,
+            id,
+          );
         insertLogRow(
           database,
           {

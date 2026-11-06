@@ -26,6 +26,13 @@ export interface CommandBrainOptions {
   unknownResetCooldownMinutes?: number;
 }
 
+/**
+ * The longest prompt (in characters) Scout sends to a model in one call. A bigger request is
+ * refused with a clear message instead of being sent. Example: 20 postings of 20,000 characters
+ * each fit; 100 postings of 20,000 do not.
+ */
+export const MAXIMUM_PROMPT_CHARACTERS = 1_000_000;
+
 /** How many characters of an error stream are quoted in a failure message. */
 const MAXIMUM_QUOTED_CHARACTERS = 200;
 
@@ -69,7 +76,13 @@ export function createCommandBrain(options: CommandBrainOptions): Brain {
 
   const callEngine = async (prompt: string): Promise<EngineReply> => {
     try {
-      const result = await runner(configuration.command, configuration.buildArguments(prompt), "");
+      if (prompt.length > MAXIMUM_PROMPT_CHARACTERS) {
+        return {
+          kind: "unavailable",
+          message: `The request is ${prompt.length} characters long, more than the ${MAXIMUM_PROMPT_CHARACTERS} Scout will send to a model in one call. Send fewer postings per request.`,
+        };
+      }
+      const result = await runner(configuration.command, configuration.buildArguments(), prompt);
       return interpretProcessResult(configuration.command, result, now());
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);

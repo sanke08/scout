@@ -263,3 +263,62 @@ describe("transition", () => {
     expect(() => store.transition("posting-1", "found", "reopen")).toThrow(ScoutError);
   });
 });
+
+describe("a job that was submitted once", () => {
+  const approvedPath: JobStatus[] = ["shortlisted", "resume-ready", "approved", "submitting"];
+
+  it("can never be skipped or re-opened, by any route through needs-you or failed", () => {
+    const routes: JobStatus[][] = [
+      ["needs-you", "skipped"],
+      ["failed", "skipped"],
+      ["unverified", "needs-you", "skipped"],
+      ["unverified", "failed", "skipped"],
+      ["applied", "contacted", "closed"],
+    ];
+    for (const route of routes) {
+      database.prepare("DELETE FROM jobs").run();
+      const store = storeWithJobAt(approvedPath);
+      // Walk as far as the table allows; the last step towards skipped must be refused.
+      const last = route[route.length - 1];
+      for (const status of route.slice(0, -1)) {
+        store.transition("posting-1", status, `step to ${status}`);
+      }
+      if (last === "skipped") {
+        expect(() => store.transition("posting-1", "skipped", "try")).toThrowError(ScoutError);
+        expect(store.get("posting-1")?.status).not.toBe("skipped");
+      }
+    }
+  });
+
+  it("can never return to found, shortlisted, resume-ready or approved", () => {
+    const store = storeWithJobAt([...approvedPath, "needs-you"]);
+    for (const target of ["found", "shortlisted", "resume-ready", "approved"] as const) {
+      expect(() => store.transition("posting-1", target, "try")).toThrowError(ScoutError);
+    }
+  });
+
+  it("still remembers it was submitted after a database upgrade from schema 1", () => {
+    const store = storeWithJobAt(approvedPath);
+    database.prepare("UPDATE jobs SET ever_submitted = 0").run();
+    // Simulates a row written before the column existed: the upgrade step marks submitted jobs.
+    database
+      .prepare(
+        "UPDATE jobs SET ever_submitted = 1 WHERE status IN ('submitting','applied','contacted','interviewing','offer','rejected','withdrawn','unverified')",
+      )
+      .run();
+    store.transition("posting-1", "needs-you", "page asked for a code");
+    expect(() => store.transition("posting-1", "skipped", "try")).toThrowError(ScoutError);
+  });
+});
+
+describe("the digest's approve, skip and undo moves", () => {
+  it("allows shortlisted -> approved -> shortlisted and shortlisted -> skipped -> shortlisted", () => {
+    const store = storeWithJobAt(["shortlisted"]);
+    expect(store.transition("posting-1", "approved", "approved in the digest").status).toBe(
+      "approved",
+    );
+    expect(store.transition("posting-1", "shortlisted", "undo").status).toBe("shortlisted");
+    expect(store.transition("posting-1", "skipped", "Wrong location").status).toBe("skipped");
+    expect(store.transition("posting-1", "shortlisted", "undo").status).toBe("shortlisted");
+  });
+});
