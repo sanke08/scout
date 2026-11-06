@@ -1,0 +1,35 @@
+{
+  "offers": [
+    {
+      "id": 90001,
+      "slug": "backend-developer",
+      "title": "Backend Developer",
+      "status": "published",
+      "department": "Engineering",
+      "description": "<p>Join the team behind our vessel scheduling service. You will build REST APIs in Java and Spring Boot, work with PostgreSQL and RabbitMQ, and ship to AWS. We review every change in pairs.</p>",
+      "requirements": "<ul><li>Two years of Java</li><li>Good habits with tests</li></ul><p>Salary: €60.000 - €75.000 per year.</p>",
+      "location": "Rotterdam, Netherlands",
+      "city": "Rotterdam",
+      "country": "Netherlands",
+      "country_code": "NL",
+      "remote": false,
+      "careers_url": "https://harbor-systems.recruitee.com/o/backend-developer",
+      "careers_apply_url": "https://harbor-systems.recruitee.com/o/backend-developer/c/new",
+      "created_at": "2026-10-05 08:00:00 UTC",
+      "published_at": "2026-10-06 08:00:00 UTC",
+      "company_name": "Harbor Systems"
+    },
+    {
+      "id": 90002,
+      "slug": "draft-role",
+      "title": "Draft Role",
+      "status": "draft",
+      "description": "<p>Not public.</p>",
+      "requirements": "",
+      "location": "Rotterdam",
+      "careers_url": "https://harbor-systems.recruitee.com/o/draft-role",
+      "created_at": "2026-10-05 08:00:00 UTC",
+      "company_name": "Harbor Systems"
+    }
+  ]
+}

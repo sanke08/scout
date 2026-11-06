@@ -1,0 +1,67 @@
+{
+  "offset": 0,
+  "limit": 100,
+  "totalFound": 2,
+  "content": [
+    {
+      "id": "7440001",
+      "name": "Data Engineer",
+      "uuid": "11111111-0000-4000-8000-000000000001",
+      "refNumber": "HS-DE-1",
+      "company": {
+        "identifier": "HarborSystems",
+        "name": "Harbor Systems"
+      },
+      "releasedDate": "2026-10-10T12:00:00.000Z",
+      "location": {
+        "city": "Hamburg",
+        "region": "HH",
+        "country": "de",
+        "remote": false,
+        "fullLocation": "Hamburg, Germany"
+      },
+      "department": {
+        "label": "Engineering"
+      },
+      "typeOfEmployment": {
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "mid_senior_level",
+        "label": "Mid-Senior Level"
+      },
+      "ref": "https://api.smartrecruiters.com/v1/companies/harbor-systems/postings/7440001",
+      "language": {
+        "code": "en"
+      }
+    },
+    {
+      "id": "7440002",
+      "name": "Site Reliability Engineer",
+      "uuid": "11111111-0000-4000-8000-000000000002",
+      "refNumber": "HS-SRE-2",
+      "company": {
+        "identifier": "HarborSystems",
+        "name": "Harbor Systems"
+      },
+      "releasedDate": "2026-10-22T12:00:00.000Z",
+      "location": {
+        "city": "",
+        "region": "",
+        "country": "de",
+        "remote": true,
+        "fullLocation": "Remote, Germany"
+      },
+      "department": {
+        "label": "Engineering"
+      },
+      "typeOfEmployment": {
+        "label": "Full-time"
+      },
+      "ref": "https://api.smartrecruiters.com/v1/companies/harbor-systems/postings/7440002",
+      "language": {
+        "code": "en"
+      }
+    }
+  ]
+}

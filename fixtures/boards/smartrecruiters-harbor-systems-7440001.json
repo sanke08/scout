@@ -1,0 +1,26 @@
+{
+  "id": "7440001",
+  "name": "Data Engineer",
+  "postingUrl": "https://jobs.smartrecruiters.com/harbor-systems/7440001",
+  "applyUrl": "https://jobs.smartrecruiters.com/harbor-systems/7440001?oga=true",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": "<p>Harbor Systems makes software that moves containers through ports faster.</p>"
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": "<p>Build and run the pipelines that turn vessel and terminal events into reports. You will use Python, Kafka and Spark, and store results in PostgreSQL and ClickHouse.</p>"
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": "<ul><li>Three years with data pipelines</li><li>Strong SQL</li></ul>"
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": "<p>We offer 30 days of holiday and a learning budget.</p>"
+      }
+    }
+  }
+}
