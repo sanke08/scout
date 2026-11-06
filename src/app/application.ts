@@ -19,6 +19,12 @@ import {
 } from "../brain/index.js";
 import { createDecider, type ScoutDecider } from "../decide/index.js";
 import { createDiscovery, type FetchImplementation } from "../discovery/index.js";
+import {
+  buildHealthReport,
+  createJobFolderManager,
+  type HealthReport,
+  type JobFolderManager,
+} from "../folders/index.js";
 import { createProfileStore, createProposalStore, type ProposalStore } from "../profile/index.js";
 import { createResumeBuilder } from "../resume/index.js";
 import {
@@ -40,6 +46,7 @@ import {
   type DatabaseSync,
 } from "../store/index.js";
 import { createBoardStore, type BoardStore } from "./boards-store.js";
+import { readModelCallsToday, syncJobFolder, withFolderSync } from "./folder-support.js";
 import { createScoreStore, type ScoreStore } from "./score-store.js";
 
 /** Days after an application during which the same company is in cooldown (no setting exists yet). */
@@ -78,6 +85,8 @@ export interface ApplicationOptions {
   actionLog?: ActionLog;
   profileStore?: ProfileStore;
   resumeBuilder?: ResumeBuilder;
+  /** The job folders. Default: one folder per job under `<directory>/jobs`. Tests may pass a fake. */
+  folders?: JobFolderManager;
 }
 
 /** The joined-up Scout: every module, built once, plus the few helpers that need several of them. */
@@ -111,6 +120,15 @@ export interface Application {
   brain(): Brain;
   /** Throws `ScoutError("paused")` while the kill switch is on. Every acting step calls it first. */
   assertNotPaused(): void;
+  /** One folder per job (`<directory>/jobs`): the description, resumes and a log, kept in step with the store. */
+  readonly folders: JobFolderManager;
+  /**
+   * Makes the job's folder match the store (creating it when the job is shortlisted). Transitions
+   * made through `jobStore` already do this; call it only after changing a job some other way.
+   */
+  syncJobFolder(jobId: string): void;
+  /** The health report: last successes, queue sizes, model calls today, paused flag, jobs needing you. */
+  healthReport(): HealthReport;
   /** Closes the database. Call once when the command ends. */
   close(): void;
 }
@@ -161,8 +179,11 @@ export function createApplication(options: ApplicationOptions = {}): Application
   const settingsStore =
     options.settingsStore ?? createSettingsStore(join(directory, "settings.json"));
   const profileStore = options.profileStore ?? createProfileStore(join(directory, "profile.json"));
-  const jobStore = options.jobStore ?? createJobStore(database!, now);
+  const storedJobs = options.jobStore ?? createJobStore(database!, now);
   const actionLog = options.actionLog ?? createActionLog(database!, now);
+  const folders =
+    options.folders ?? createJobFolderManager({ jobsDirectory: join(directory, "jobs"), now });
+  const jobStore = withFolderSync(storedJobs, { folders, actionLog });
   const proposalStore = createProposalStore(join(directory, "proposals.json"), { now });
   const discovery =
     options.discovery ??
@@ -203,6 +224,19 @@ export function createApplication(options: ApplicationOptions = {}): Application
     },
     assertNotPaused() {
       assertNotPaused(settingsStore.load());
+    },
+    folders,
+    syncJobFolder(jobId) {
+      syncJobFolder({ jobStore, folders, actionLog }, jobId);
+    },
+    healthReport() {
+      return buildHealthReport({
+        jobStore,
+        settings: settingsStore.load(),
+        actionLog,
+        now,
+        modelCallsToday: () => readModelCallsToday(directory, now()),
+      });
     },
     close() {
       database?.close();
