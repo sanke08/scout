@@ -459,5 +459,7 @@ describe("property: submit is only ever called when every rule allows it", () =>
                   submits += submitCount(driver);
                 }
     expect(submits).toBeGreaterThan(0);
-  });
+    // This property runs every combination (thousands of runs), so it needs more than the default
+    // 5 seconds on a slow machine such as a shared CI runner.
+  }, 60_000);
 });
