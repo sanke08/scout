@@ -56,32 +56,40 @@ export function renderNoteMarkdown(
     `# ${toOneLine(note.title)}`,
     "",
     "## Overview",
+    "",
     toOneLine(note.overview),
   ];
   lines.push(
     "",
     "## Verdict",
+    "",
     `${VERDICT_LABELS[note.verdict.kind]}. ${toOneLine(note.verdict.reason)}`,
   );
-  lines.push("", "## Stack");
+  lines.push("", "## Stack", "");
   for (const term of note.stack.map(cleanStackTerm).filter((text) => text !== "")) {
     lines.push(`- ${term}`);
   }
-  lines.push("", "## Features");
+  lines.push("", "## Features", "");
   for (const feature of note.features) {
     lines.push(...renderFeature(feature));
   }
-  lines.push("", "## Do not claim");
+  lines.push("", "## Do not claim", "");
   for (const statement of note.doNotClaim) {
     lines.push(`- ${toOneLine(statement)}`);
   }
-  lines.push("", "## Numbers");
+  lines.push("", "## Numbers", "");
   if (note.numbers.length === 0) {
     lines.push("None found in the configuration or code.");
   }
   for (const entry of note.numbers) {
     lines.push(`- ${toOneLine(entry.figure)}: ${toOneLine(entry.meaning)}`);
   }
-  lines.push("", "## Read once", `Read from the folder ${toOneLine(folderName)} on ${readOn}.`, "");
+  lines.push(
+    "",
+    "## Read once",
+    "",
+    `Read from the folder ${toOneLine(folderName)} on ${readOn}.`,
+    "",
+  );
   return lines.join("\n");
 }
