@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply: Full Stack Engineer at ExampleCorp (fictional Ashby-style form)</title>
+  </head>
+  <body>
+    <h1>Full Stack Engineer</h1>
+    <form action="https://example.com/ashby-apply" method="post">
+      <div>
+        <label for="_systemfield_name">Name</label>
+        <input id="_systemfield_name" name="_systemfield_name" type="text" required />
+      </div>
+      <div>
+        <label for="_systemfield_email">Email</label>
+        <input id="_systemfield_email" name="_systemfield_email" type="email" required />
+      </div>
+      <div>
+        <label for="_systemfield_resume">Resume</label>
+        <input id="_systemfield_resume" name="_systemfield_resume" type="file" required />
+      </div>
+      <div>
+        <label for="portfolio">Website or portfolio</label>
+        <input id="portfolio" name="portfolio" type="url" />
+      </div>
+      <div>
+        <label for="salary">What are your salary expectations?</label>
+        <input id="salary" name="salary_expectations" type="text" required />
+      </div>
+      <div>
+        <label for="disagree">Describe a time you disagreed with a senior engineer</label>
+        <textarea id="disagree" name="disagree_story" required></textarea>
+      </div>
+      <div>
+        <label for="pronouns">What pronouns do you use?</label>
+        <input id="pronouns" name="pronouns" type="text" />
+      </div>
+      <div>
+        <label>
+          <input id="privacy" name="privacy_consent" type="checkbox" required />
+          I agree to the processing of my data under the privacy policy
+        </label>
+      </div>
+      <button class="submit" id="submit-button" type="submit">Submit Application</button>
+    </form>
+  </body>
+</html>
