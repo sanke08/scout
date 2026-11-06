@@ -1,0 +1,32 @@
+{
+  "title": "Pocket Queue",
+  "overview": "A small in-memory message queue with an HTTP API, written in TypeScript on Express.",
+  "verdict": {
+    "kind": "unfinished",
+    "reason": "The server and leases work, but there is no acknowledge route, no persistence and no tests."
+  },
+  "stack": ["TypeScript", "Node.js", "Express", "Docker", "Kafka"],
+  "features": [
+    {
+      "name": "Message leases",
+      "howItWorks": "A claimed message is leased for 30 seconds and goes back to the queue if it is not acknowledged in time.",
+      "status": "built",
+      "designDecisions": [
+        "Leases expire on the next claim instead of with a background timer, to keep the code small."
+      ],
+      "failureHandling": "A stalled consumer does not lose the message; it returns to the queue when the lease expires."
+    },
+    {
+      "name": "Acknowledge route",
+      "howItWorks": "The README describes removing a leased message, but no route for it exists in the code.",
+      "status": "described-only",
+      "designDecisions": [],
+      "failureHandling": ""
+    }
+  ],
+  "numbers": [
+    { "figure": "30", "meaning": "Lease length in seconds (LEASE_SECONDS in the code)." },
+    { "figure": "millions of messages per second", "meaning": "Throughput claimed by the README." }
+  ],
+  "doNotClaim": ["That messages survive a restart: queues live in memory only."]
+}
