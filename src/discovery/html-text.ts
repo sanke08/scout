@@ -40,7 +40,7 @@ export function htmlToText(rawHtml: string): string {
   const lines = document
     .root()
     .text()
-    .replace(/ /g, " ")
+    .replace(/\u00a0/g, " ")
     .split("\n")
     .map((line) => line.replace(/[ \t]+/g, " ").trim());
   return lines

@@ -104,7 +104,7 @@ const VOCABULARY: VocabularyEntry[] = [
   { name: "Pandas", caseSensitive: true },
   { name: "NumPy" },
   { name: "LangChain" },
-  { name: "Machine Learning", aliases: ["machine learning"] },
+  { name: "Machine Learning" },
   { name: "LLM", aliases: ["LLMs"], caseSensitive: true },
   { name: "Jest", caseSensitive: true },
   { name: "Vitest" },

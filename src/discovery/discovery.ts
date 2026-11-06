@@ -54,13 +54,8 @@ function assertPlainToken(token: string, kind: string): void {
 
 /** Throws unless `address` is an http or https address. */
 function assertWebAddress(address: string): void {
-  let protocol = "";
-  try {
-    protocol = new URL(address).protocol;
-  } catch {
-    protocol = "";
-  }
-  if (protocol !== "http:" && protocol !== "https:") {
+  const isWebAddress = /^https?:\/\//i.test(address) && URL.canParse(address);
+  if (!isWebAddress) {
     throw new ScoutError(
       "invalid-input",
       `The feed address "${address}" is not an http or https address.`,
@@ -124,7 +119,7 @@ export function createDiscovery(options: DiscoveryOptions = {}): Discovery {
         assertPlainToken(token, kind);
         postings = await fetchKnownBoard(fetcher, kind, token, now);
       }
-      log.info("fetched board", { board: `${kind}:${token}`, jobs: postings.length });
+      log.debug("fetched board", { board: `${kind}:${token}`, jobs: postings.length });
       return postings;
     },
   };

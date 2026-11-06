@@ -6,8 +6,8 @@
     <description>Remote and hybrid jobs, updated daily.</description>
     <item>
       <title>Examplecorp: Senior Backend Engineer</title>
-      <link>https://remote-jobs.example.com/jobs/senior-backend-engineer-examplecorp?utm_source=rss&utm_medium=feed</link>
-      <guid isPermaLink="false">https://remote-jobs.example.com/jobs/senior-backend-engineer-examplecorp?utm_source=rss&utm_medium=feed</guid>
+      <link>https://remote-jobs.example.com/jobs/senior-backend-engineer-examplecorp?utm_source=rss&amp;utm_medium=feed</link>
+      <guid isPermaLink="false">https://remote-jobs.example.com/jobs/senior-backend-engineer-examplecorp?utm_source=rss&amp;utm_medium=feed</guid>
       <pubDate>Fri, 02 Oct 2026 09:00:00 GMT</pubDate>
       <description><![CDATA[<p>Examplecorp builds scheduling software for clinics. We are hiring a Senior Backend Engineer to design and run the services behind our booking platform.</p><h3>What you will do</h3><ul><li>Design and build APIs in Node.js and TypeScript</li><li>Model data in PostgreSQL and keep queries fast</li><li>Run services on Kubernetes with Docker and Terraform</li><li>Review code and mentor other engineers</li></ul><h3>What we expect</h3><ul><li>Five years of backend experience</li><li>Comfort with distributed systems and on-call work</li><li>Clear written communication</li></ul><p>Salary: €85,000 - €105,000 per year. Hybrid: two days a week in our Berlin office. Apply on our careers page.</p>]]></description>
     </item>
