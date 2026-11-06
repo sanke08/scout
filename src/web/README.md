@@ -1,13 +1,70 @@
 # web
 
-The local web server and the Digest, Profile and Settings page, bound to 127.0.0.1. The approved look and behaviour is in `reference/scout-page.html` (fictional data).
+The local web server and the Digest, Profile and Settings page, bound to 127.0.0.1. The approved look and behaviour is in `reference/scout-page.html` (fictional data, read-only reference).
 
 **Owner:** the `web` agent, branch `feat/web`. Only this folder (and its tests and fixtures) changes in its branch.
 
-**Public interface:** `src/web/index.ts`. Other modules import only from there or from `src/shared`.
+**Public interface:** `src/web/index.ts` exports `startWebServer(dependencies, options)`, the types `WebDependencies`, `WebServerOptions`, `RunningWebServer`, `DigestCard`, `DigestProvider`, `DigestAnswer`, `PendingProposal`, and the list `SKIP_TAGS`. Other modules import only from there or from `src/shared`.
 
 **Plan and checks:** see the `web` section of [docs/PLAN.md](../../docs/PLAN.md).
 
+## What it is
+
+A small HTTP server (`node:http`, no framework) that serves one page with three views and a JSON API behind it. The server holds no logic of its own: it checks input, calls the stores and the resume builder it was given, and shapes the reply. Everything it needs is passed in, so tests use fakes.
+
+```
+const server = await startWebServer(
+  { profileStore, settingsStore, jobStore, resumeBuilder, digestProvider },
+  { port: 4173 },
+);
+// server.url is "http://127.0.0.1:4173"; await server.close() stops it.
+```
+
+Optional dependencies: `now` (a clock, tests inject a fixed one) and `pendingProposals` (model-written wordings waiting for approval, shown read-only on the Profile view).
+
+## How to run it
+
+The module has no command of its own yet; the command-line wiring that calls `startWebServer` comes with the CLI. To look at the page, start the server from a small script with fake or real stores and open the printed address. Pass `port: 0` to let the system choose a free port. The page files are read from `src/web/public/` when the server starts.
+
+Checks: `npm run check`. The tests start a real server on a free port and talk to it over HTTP; they need no network beyond 127.0.0.1.
+
+## Safety rules the server enforces
+
+- Binds to `127.0.0.1` only.
+- A request whose `Host` header is not `127.0.0.1:<port>` or `localhost:<port>` is refused with 403 (DNS-rebinding defence).
+- A change request (POST or PUT) with an `Origin` header other than the server's own is refused with 403.
+- Request bodies are capped at 1 MB (413), must be JSON (415 for another content type, 400 for invalid JSON), and are validated with zod; a refusal is `{ "error": "<full sentence>" }` with a proper status.
+- Static files come from a fixed allow-list read at start-up; the request path is looked up in a map, never joined onto a folder, so directory traversal cannot work.
+- The page sends a Content-Security-Policy (scripts only from the server itself) and never writes server text as markup.
+
+## Routes
+
+| Method and path                | Body                                         | Reply                                                                                       |
+| ------------------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| GET `/`, `/styles.css`, `*.js` | none                                         | The page and its files (fixed list)                                                         |
+| GET `/api/health`              | none                                         | `{ ok: true }`                                                                              |
+| GET `/api/profile`             | none                                         | `{ profile, pendingProposals? }`                                                            |
+| PUT `/api/profile`             | the whole profile (`profileSchema`)          | `{ profile, version }`; the store bumps the version                                         |
+| GET `/api/settings`            | none                                         | `{ settings, defaults }`                                                                    |
+| PUT `/api/settings`            | the whole settings object (`settingsSchema`) | `{ settings }`                                                                              |
+| GET `/api/digest`              | none                                         | `{ generatedAt, mode, automationPaused, skipTags, cards, needsYou, recentlyApplied }`       |
+| POST `/api/jobs/:id/approve`   | none or `{}`                                 | `{ job }`; the job becomes `approved`                                                       |
+| POST `/api/jobs/:id/skip`      | `{ tag }` (one of `SKIP_TAGS`)               | `{ job }`; the job becomes `skipped`, the tag is the reason                                 |
+| POST `/api/jobs/:id/undo`      | none or `{}`                                 | `{ job }`; the job returns to `shortlisted`                                                 |
+| POST `/api/resume`             | `{ keywords: string[], company?: string }`   | the `ResumeBuild` of the saved profile (LaTeX, estimates, matched and not-in-profile terms) |
+
+Status codes: 400 invalid input, 403 wrong host or origin, 404 unknown route or job or missing profile, 405 wrong method (with `Allow`), 409 illegal transition, 413 body too large, 415 not JSON, 500 unexpected (the cause is logged, never sent). A `ScoutError` from a store keeps its own sentence and maps by code.
+
+## The page
+
+Static files in `src/web/public/`: `index.html`, `styles.css`, and plain ES modules (`app.js` starts the page; `digest-view.js`, `profile-view.js`, `settings-view.js` draw the views; `api-client.js` is the only code that calls the server; `dom.js` builds elements through `textContent` only; `highlight.js` marks keywords; `tex-preview.js` reads the resume's LaTeX back as lines for the preview sheet). Views are chosen by the address hash: `#digest`, `#profile`, `#settings`. Keys on the Digest: `j` `k` move, `a` approve, `s` skip then pick a tag, `Enter` details. The page does not build resumes: it calls `POST /api/resume` (after a short pause while typing) and shows what comes back. No data is kept in the browser's own storage.
+
 ## Glossary
 
-Define each term of this module once here; code and comments use the short form.
+- **Digest:** the daily list of shortlisted jobs with approve and skip actions, plus the "needs you" block and recent applications.
+- **Digest card (`DigestCard`):** one shortlisted job with its scores, reasons, unmet requirements, answers and resume text. Supplied by a `DigestProvider`.
+- **DigestProvider:** a function that returns today's cards. The real one is wired later; tests use a fake.
+- **Skip tag:** the short reason given when skipping a job ("Wrong location", "Too junior", "Company", "Not interested"). It is stored as the transition reason.
+- **Tailor preview:** the keyword box on the Profile view and the server's answer: which keywords the profile supports and which it does not.
+- **Pending proposal:** a model-written wording waiting for approval; shown read-only and changes nothing.
+- **Own origin:** `http://127.0.0.1:<port>` or `http://localhost:<port>` for the running server; the only origin allowed to change data.
