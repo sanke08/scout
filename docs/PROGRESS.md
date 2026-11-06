@@ -4,7 +4,7 @@ Updated by the orchestrator when a branch is merged.
 
 ## Current
 
-Waves 0 to 2 are merged on `main` (all 12 modules). Wave 3 (wiring job folders, mail, notes, interview and apply into the command line) and an independent review are in progress.
+All waves are merged on `main`: 12 modules, wired into the command line. An independent review (Fable) found two blockers, both fixed with tests; a second review is the next check.
 
 ## Phase status
 
@@ -32,9 +32,12 @@ Waves 0 to 2 are merged on `main` (all 12 modules). Wave 3 (wiring job folders, 
 - **2026-11-07 tracking:** read-only mail reader, rules classifier, matcher, follow-up drafts, alert parsers, funnel, recruiter contact helpers. 850 tests at merge after removing a test that opened a loopback socket. The IMAP connection and the alert formats are untested against real mail.
 - **2026-11-07 apply:** form snapshot, field mapping, dry-run engine, evidence, Playwright driver. 956 tests at merge. The Playwright driver has never run against a real browser; the form fixtures are fictional.
 
+- **2026-11-07 wave 3:** folders wired (job folder on first shortlist, board, status, backup, restore, leads, service plist, resume --job), mail and notes wired (notes, interview, inbox, followups, funnel), apply wired (approve, skip, undo, apply, self-test with a typed `yes` before any automatic submit; no flag skips it). 1053 tests at merge.
+- **2026-11-07 review fixes:** a job submitted once can never be skipped or re-opened (schema 2 `ever_submitted`); the digest's approve and undo are legal in the real state machine and covered by an end-to-end test; the model prompt travels on stdin with a 1,000,000-character cap and was verified with one real Claude call; saving a profile refuses a variant using a term outside its point's allowed list.
+
 ## Not built yet (not claimed to work)
 
-The modules for applying, mail tracking, project reading, interview preparation, job folders, backups and health exist and are tested with fakes, but are not yet reachable from the command line until wave 3 merges. Nothing has been run against a real browser, a real mailbox, a real model on a real repository, or a live application form.
+Everything is reachable from the command line and tested with fakes. Nothing has been run against a real browser (the Playwright driver and the keep-the-window-open flow), a real mailbox, a real model on a real repository, or a live application form. The adapter self-test is not scheduled daily, and `recordResumeSent` is not called after a submit yet.
 
 ## Done entries
 
