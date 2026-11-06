@@ -1,0 +1,7 @@
+dist
+node_modules
+data
+.worktrees
+package-lock.json
+fixtures/**/*.html
+src/web/reference

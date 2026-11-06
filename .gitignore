@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+data/
+.env
+.env.*
+.worktrees/
+.DS_Store
+*.log
+# LaTeX build artifacts (generated resumes live in data/, not in the repository)
+*.aux
+*.out
+*.pdf
+!fixtures/**/*.pdf

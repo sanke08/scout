@@ -1,0 +1,1195 @@
+<title>Scout Digest</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column, rows separated by hairlines, no cards. Colour is neutral; the single accent marks the primary action only. */
+:root{
+  --bg:#ffffff; --surface:#ffffff; --fg:#111111; --muted:#6e6e6e; --line:#e6e6e6;
+  --accent:#111111; --accent-fg:#ffffff; --warn:#111111; --warn-bg:#fafafa;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e0e0e; --surface:#0e0e0e; --fg:#ededed; --muted:#8f8f8f; --line:#262626;
+  --accent:#ededed; --accent-fg:#0e0e0e; --warn:#ededed; --warn-bg:#151515; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e0e0e; --surface:#0e0e0e; --fg:#ededed; --muted:#8f8f8f; --line:#262626;
+  --accent:#ededed; --accent-fg:#0e0e0e; --warn:#ededed; --warn-bg:#151515; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--sans);
+  padding-block:40px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:760px;margin:0 auto}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap}
+h1{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:0}
+.date{color:var(--muted);font-size:14px}
+.status{display:flex;flex-wrap:wrap;gap:4px 20px;margin:12px 0 0;padding:0;list-style:none;color:var(--muted);font-size:13px}
+.status b{color:var(--fg);font-weight:500;font-family:var(--mono);font-size:12.5px}
+
+h2{font-size:12px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+section{margin-top:40px}
+
+.attn{background:var(--warn-bg);border:1px solid var(--line);border-radius:4px;padding:14px 16px}
+.attn p{margin:0 0 10px}
+.attn .src{color:var(--muted);font-size:13px}
+.attn form{display:flex;gap:8px;flex-wrap:wrap}
+.attn input{flex:1 1 220px;min-width:0;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--fg)}
+
+.list{border-top:1px solid var(--line)}
+.job{border-bottom:1px solid var(--line)}
+.row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:4px 14px;align-items:start;padding:16px 0}
+.score{font-family:var(--mono);font-size:15px;font-weight:500;padding-top:1px}
+.title{font-weight:500;margin:0}
+.meta{color:var(--muted);font-size:13.5px;margin:2px 0 0}
+.why{color:var(--muted);font-size:13.5px;margin:6px 0 0}
+.actions{display:flex;gap:6px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:4px;padding:5px 12px;font-size:13.5px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.primary:hover{opacity:.9}
+.link{background:none;border:0;padding:0;color:var(--muted);font-size:13px;text-decoration:underline;text-underline-offset:3px}
+.link:hover{color:var(--fg)}
+
+.detail{padding:0 0 18px 58px;font-size:14px}
+.detail h3{font-size:12px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px}
+.detail ul{margin:0;padding-left:18px}
+.detail li{margin:2px 0}
+.qa{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 16px;margin:0;font-size:13.5px}
+.qa dt{color:var(--muted)}.qa dd{margin:0}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.tag{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:2px 10px;font-size:12.5px;color:var(--muted)}
+.tag:hover{color:var(--fg);border-color:var(--muted)}
+
+.state{font-size:13px;color:var(--muted)}
+.job[data-state="approved"] .title,.job[data-state="skipped"] .title{color:var(--muted)}
+.job[data-state="skipped"] .row{opacity:.55}
+
+.done{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 16px;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px}
+.done:first-child{border-top:1px solid var(--line)}
+.done .t{margin:0}.done .m{color:var(--muted);font-size:13px;margin:0}
+.done .s{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-align:right;align-self:center}
+.hint{margin-top:32px;color:var(--muted);font-size:12.5px}
+kbd{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line);border-radius:3px;padding:0 5px;background:var(--surface)}
+.example{font-size:12px;color:var(--muted);margin-top:4px}
+
+nav{display:flex;gap:18px;font-size:14px}
+nav a{color:var(--muted);text-decoration:none;padding-bottom:2px;border-bottom:1px solid transparent}
+nav a:hover{color:var(--fg)}
+nav a[aria-current="page"]{color:var(--fg);border-bottom-color:var(--fg)}
+nav a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+#viewSettings section{margin-top:32px}
+.group{border-top:1px solid var(--line)}
+.set{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:14px 0;border-bottom:1px solid var(--line)}
+.set .lbl{min-width:0;flex:1}
+.set label,.set .name,.opt .name{font-weight:500;display:block}
+.set p,.opt p{margin:2px 0 0;color:var(--muted);font-size:13.5px}
+.ctl{flex:none;display:flex;align-items:center;gap:10px}
+.ctl input[type=number],.ctl input[type=time],.ctl select{font:inherit;font-size:14px;padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--fg)}
+.ctl input[type=number]{width:76px;font-family:var(--mono)}
+.ctl input[type=range]{width:140px;accent-color:var(--accent)}
+.val{font-family:var(--mono);font-size:13px;color:var(--muted)}
+#minVal{color:var(--fg);min-width:2ch;text-align:right}
+.sw{appearance:none;-webkit-appearance:none;width:34px;height:20px;border-radius:999px;border:1px solid var(--muted);background:transparent;position:relative;cursor:pointer;margin:0}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--muted)}
+.sw:checked{background:var(--accent);border-color:var(--accent)}
+.sw:checked::after{left:16px;background:var(--accent-fg)}
+.sw:focus-visible,.ctl select:focus-visible,.ctl input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.opt input{margin:4px 0 0;accent-color:var(--accent)}
+.note{color:var(--muted);font-size:13.5px;margin:10px 0 0}
+.savedmsg{color:var(--muted);font-size:13px;min-height:20px;margin:24px 0 0}
+#viewProfile section{margin-top:32px}
+.pbox{border:1px solid var(--line);border-radius:4px;padding:14px 16px}
+.fld{display:block;width:100%;font:inherit;font-size:14px;line-height:1.45;padding:7px 10px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--fg);resize:vertical}
+.fld:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.pbox .fld{margin-top:6px}
+.small{font-size:13px;color:var(--muted)}
+.pv{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;font-size:14px}
+.pv ul{margin:4px 0 12px;padding-left:18px}
+.pv li{margin:3px 0}
+.pv .t{font-weight:500;margin:0}
+mark{background:var(--line);color:inherit;border-radius:2px;padding:0 1px}
+.kv{display:grid;grid-template-columns:170px minmax(0,1fr);gap:8px;margin:6px 0}
+.elist{border-bottom:1px solid var(--line);margin-bottom:12px}
+.entry{border-top:1px solid var(--line);padding:16px 0 8px}
+.ehead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.ehead p{margin:0}
+.pt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;padding:8px 0}
+.pt p{margin:0}
+.pt.off .pt-text{color:var(--muted)}
+.pt-meta{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin-top:3px;color:var(--muted);font-size:12.5px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:0 8px;font-size:12px}
+.form{display:grid;gap:10px;padding:10px 0 12px}
+.form label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:3px}
+.vrow{display:grid;gap:8px;padding:10px;border:1px dashed var(--line);border-radius:4px}
+.fbtns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fbtns .grow{flex:1}
+.addrow{padding:4px 0 8px}
+.mono{font-family:var(--mono);font-size:12px;line-height:1.5;white-space:pre;overflow:auto}
+.sheet{background:#ffffff;color:#111111;border:1px solid var(--line);padding:22px 26px;margin:12px 0;font:12px/1.4 Georgia,"Times New Roman",serif;overflow-x:auto}
+.sheet p{margin:0 0 3px}
+.sheet ul{margin:2px 0 8px;padding-left:18px}
+.sheet li{margin:1px 0}
+.sheet mark{background:#e8e8e8;color:#111111}
+.s-name{font-size:22px;font-variant:small-caps;text-align:center;letter-spacing:.02em}
+.s-c{text-align:center;font-size:11px;margin-bottom:8px}
+.s-h{font-variant:small-caps;font-size:14px;border-bottom:1px solid #111111;margin:10px 0 4px}
+.s-e{display:flex;justify-content:space-between;gap:12px}
+.s-i{font-style:italic;font-size:11px}
+@media (max-width:560px){
+  .kv{grid-template-columns:1fr}
+  .set{flex-wrap:wrap;gap:10px}
+  .ctl input[type=range]{width:120px}
+  .row{grid-template-columns:36px minmax(0,1fr)}
+  .actions{grid-column:2;margin-top:8px}
+  .detail{padding-left:0}
+  .qa{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:no-preference){.btn,.tag{transition:border-color .12s,opacity .12s}}
+</style>
+
+<main>
+  <header>
+    <h1>Scout</h1>
+    <nav aria-label="Pages">
+      <a href="#digest" id="navDigest">Digest</a>
+      <a href="#profile" id="navProfile">Profile</a>
+      <a href="#settings" id="navSettings">Settings</a>
+    </nav>
+  </header>
+  <ul class="status">
+    <li>Friday 7 November</li>
+    <li>Mode <b id="modeLabel">Wait for approval</b></li>
+    <li id="pausedLi" hidden><b>Automation paused</b></li>
+    <li>Sources <b>38 of 40</b> healthy</li>
+    <li>Model calls <b id="calls">14 / 40</b> today</li>
+    <li>Applied this week <b>6</b></li>
+    <li>Next run <b>11:30</b></li>
+  </ul>
+  <div id="viewDigest">
+  <p class="example">Example data, for layout only.</p>
+
+  <section id="needs">
+    <h2>Needs you · 1</h2>
+    <div class="attn">
+      <p class="src">Harbor Freight Labs · Backend Engineer · form question</p>
+      <p>"Are you open to relocating to Lisbon?" is not in your answer bank.</p>
+      <form id="answerForm">
+        <input id="answer" type="text" placeholder="Your answer" aria-label="Your answer">
+        <button class="btn primary" type="submit">Save to answer bank</button>
+        <button class="btn" type="button" id="skipQ">Skip job</button>
+      </form>
+    </div>
+  </section>
+
+  <section>
+    <h2>Today's shortlist · <span id="count">5</span> to review</h2>
+    <div class="list" id="list"></div>
+    <p class="hint"><kbd>j</kbd> <kbd>k</kbd> move &nbsp; <kbd>a</kbd> approve &nbsp; <kbd>s</kbd> skip &nbsp; <kbd>Enter</kbd> details</p>
+  </section>
+
+  <section>
+    <h2>Recently applied</h2>
+    <div>
+      <div class="done"><p class="t">Northwind Data · Platform Engineer</p><span class="s">confirmed</span><p class="m">Submitted Wed 5 Nov · Greenhouse · evidence saved</p></div>
+      <div class="done"><p class="t">Linden Systems · Backend Engineer</p><span class="s">reply</span><p class="m">Recruiter wrote Thu 6 Nov · Lever</p></div>
+      <div class="done"><p class="t">Fathom Pay · Software Engineer</p><span class="s">no reply · 7d</span><p class="m">Follow-up drafted · Ashby</p></div>
+    </div>
+  </section>
+  </div>
+
+  <div id="viewProfile" hidden></div>
+
+  <div id="viewSettings" hidden>
+    <p class="savedmsg" id="savedMsg">Changes save automatically on this device.</p>
+
+    <section>
+      <h2>When Scout applies</h2>
+      <div class="group">
+        <label class="opt"><input type="radio" name="mode" value="approve" data-key="mode">
+          <span><span class="name">Wait for my approval</span><p>Scout fills the form, then waits. Nothing is sent until you approve it in the digest.</p></span></label>
+        <label class="opt"><input type="radio" name="mode" value="auto" data-key="mode">
+          <span><span class="name">Apply automatically on trusted boards</span><p>Scout submits on boards you set to Automatic below. Everything else still waits for you.</p></span></label>
+        <label class="opt"><input type="radio" name="mode" value="prepare" data-key="mode">
+          <span><span class="name">Prepare only</span><p>Scout never submits. It gets everything ready and you apply yourself.</p></span></label>
+      </div>
+      <div class="set"><div class="lbl"><label for="s_dryrun">Dry run first on new boards</label><p>Fill the form and stop before submitting, until the board has a clean record.</p></div>
+        <div class="ctl"><input id="s_dryrun" class="sw" type="checkbox" role="switch" data-key="dryrun"></div></div>
+      <div class="set"><div class="lbl"><label for="s_cap">Daily application limit</label><p>Scout stops applying for the day after this many.</p></div>
+        <div class="ctl"><input id="s_cap" type="number" min="0" max="50" data-key="cap"></div></div>
+      <div class="set"><div class="lbl"><label for="s_min">Minimum score for the shortlist</label><p>Jobs below this score are skipped.</p></div>
+        <div class="ctl"><input id="s_min" type="range" min="50" max="95" step="1" data-key="minscore"><span class="val" id="minVal">75</span></div></div>
+    </section>
+
+    <section>
+      <h2>Job boards</h2>
+      <div class="group">
+        <div class="set"><div class="lbl"><label for="b_greenhouse">Greenhouse</label><p>12 clean runs</p></div><div class="ctl"><select id="b_greenhouse" data-key="b_greenhouse"><option value="stage">Prepare only</option><option value="fill">Fill, I submit</option><option value="auto">Automatic</option></select></div></div>
+        <div class="set"><div class="lbl"><label for="b_lever">Lever</label><p>7 clean runs</p></div><div class="ctl"><select id="b_lever" data-key="b_lever"><option value="stage">Prepare only</option><option value="fill">Fill, I submit</option><option value="auto">Automatic</option></select></div></div>
+        <div class="set"><div class="lbl"><label for="b_ashby">Ashby</label><p>2 clean runs</p></div><div class="ctl"><select id="b_ashby" data-key="b_ashby"><option value="stage">Prepare only</option><option value="fill">Fill, I submit</option><option value="auto">Automatic</option></select></div></div>
+        <div class="set"><div class="lbl"><label for="b_workable">Workable</label><p>No runs yet</p></div><div class="ctl"><select id="b_workable" data-key="b_workable"><option value="stage">Prepare only</option><option value="fill">Fill, I submit</option><option value="auto">Automatic</option></select></div></div>
+      </div>
+      <p class="note">Automatic works only after you choose "Apply automatically on trusted boards" above.</p>
+    </section>
+
+    <section>
+      <h2>LinkedIn, Indeed and Naukri</h2>
+      <div class="group">
+        <div class="set"><div class="lbl"><label for="s_alerts">Read job-alert emails</label><p>Scout finds jobs from your alert emails. It never applies on these sites by itself; it opens the page and you submit.</p></div>
+          <div class="ctl"><input id="s_alerts" class="sw" type="checkbox" role="switch" data-key="alerts"></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Model</h2>
+      <div class="group">
+        <div class="set"><div class="lbl"><label for="s_engine">Main engine</label><p>Used for scoring and tailoring.</p></div>
+          <div class="ctl"><select id="s_engine" data-key="engine"><option value="claude">Claude Code</option><option value="codex">Codex</option></select></div></div>
+        <div class="set"><div class="lbl"><label for="s_fallback">Switch engine when the limit is reached</label><p>Otherwise Scout keeps filtering and waits for the reset.</p></div>
+          <div class="ctl"><input id="s_fallback" class="sw" type="checkbox" role="switch" data-key="fallback"></div></div>
+        <div class="set"><div class="lbl"><label for="s_budget">Daily model calls</label><p>Scout stays under this number.</p></div>
+          <div class="ctl"><input id="s_budget" type="number" min="5" max="500" data-key="budget"></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Notifications and follow-ups</h2>
+      <div class="group">
+        <div class="set"><div class="lbl"><label for="s_digest">Digest time</label><p>When the daily list is ready.</p></div>
+          <div class="ctl"><input id="s_digest" type="time" data-key="digest"></div></div>
+        <div class="set"><div class="lbl"><label for="s_notify">Desktop notification</label></div>
+          <div class="ctl"><input id="s_notify" class="sw" type="checkbox" role="switch" data-key="notify"></div></div>
+        <div class="set"><div class="lbl"><label for="s_follow">Draft a follow-up after</label><p>Days without a reply. You approve it before it is sent.</p></div>
+          <div class="ctl"><input id="s_follow" type="number" min="3" max="30" data-key="followup"><span class="val">days</span></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Form answers</h2>
+      <div class="group">
+        <div class="set"><div class="lbl"><label for="s_demo">Demographic and equal-opportunity questions</label><p>Scout never guesses these.</p></div>
+          <div class="ctl"><select id="s_demo" data-key="demo"><option value="prefer">Prefer not to say</option><option value="ask">Ask me each time</option></select></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Safety</h2>
+      <div class="group">
+        <div class="set"><div class="lbl"><label for="s_pause">Pause all automation</label><p>Stops submitting and form filling now. Finding and scoring jobs continues.</p></div>
+          <div class="ctl"><input id="s_pause" class="sw" type="checkbox" role="switch" data-key="paused"></div></div>
+        <div class="set"><div class="lbl"><span class="name">Reset to defaults</span></div>
+          <div class="ctl"><button class="btn" type="button" id="resetBtn">Reset</button></div></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+var jobs = [
+  {id:1, score:88, title:"Backend Engineer", co:"Northgate Labs", loc:"Remote, Europe", age:"posted 1d ago", src:"Ashby",
+   why:"Matches Go, Postgres and queue work. Salary above your floor.",
+   met:["4+ years backend (you have 5)","Postgres and message queues","Remote in Europe"], missing:["Kubernetes listed as nice to have"],
+   qa:[["Notice period","30 days"],["Work authorization","EU"],["Salary expectation","EUR 55–65k"],["Resume","Backend resume"]]},
+  {id:2, score:83, title:"Platform Engineer", co:"Quill & Ross", loc:"Berlin, hybrid", age:"posted 2d ago", src:"Greenhouse",
+   why:"Strong match on infrastructure. Hybrid, two days a week in office.",
+   met:["Containers and CI/CD","On-call experience","Berlin office"], missing:["Terraform: one year asked, none in profile"],
+   qa:[["Notice period","30 days"],["Work authorization","EU"],["Salary expectation","EUR 55–65k"],["Resume","Platform resume"]]},
+  {id:3, score:79, title:"Software Engineer, Payments", co:"Ledgerline", loc:"Remote, Europe", age:"posted 1d ago", src:"Lever",
+   why:"Good fit on APIs and reliability. Payments domain is new to you.",
+   met:["API design","Reliability and retries","Remote in APAC"], missing:["Payments or fintech experience preferred"],
+   qa:[["Notice period","30 days"],["Work authorization","EU"],["Salary expectation","EUR 55–65k"],["Resume","Backend resume"]]},
+  {id:4, score:74, title:"Senior Backend Engineer", co:"Oakfield Health", loc:"Munich", age:"posted 4d ago", src:"Workable",
+   why:"Seniority is one level above your target. Domain is healthcare.",
+   met:["Backend stack","Pune office"], missing:["7+ years asked, you have 5"],
+   qa:[["Notice period","30 days"],["Work authorization","EU"],["Salary expectation","EUR 55–65k"],["Resume","Backend resume"]]},
+  {id:5, score:71, title:"Backend Developer", co:"Marlow Systems", loc:"Remote, Europe", age:"posted 3d ago", src:"Recruitee",
+   why:"Stack fits. Company is small and has little public history.",
+   met:["Stack match","Remote in Europe"], missing:["No salary range listed"],
+   qa:[["Notice period","30 days"],["Work authorization","EU"],["Salary expectation","EUR 55–65k"],["Resume","Backend resume"]]}
+];
+var reasons=["Wrong location","Too junior","Company","Not interested"];
+var listEl=document.getElementById("list"), cur=0, calls=14;
+
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+
+function render(){
+  listEl.innerHTML=jobs.map(function(j,i){
+    var st=j.state||"";
+    var right = st==="approved" ? '<span class="state">Approved. <button class="link" data-act="undo" data-i="'+i+'">Undo</button></span>'
+      : st==="skipped" ? '<span class="state">Skipped'+(j.reason?' · '+esc(j.reason):'')+'. <button class="link" data-act="undo" data-i="'+i+'">Undo</button></span>'
+      : '<div class="actions"><button class="btn primary" data-act="approve" data-i="'+i+'">Approve</button><button class="btn" data-act="skip" data-i="'+i+'">Skip</button></div>';
+    var open=j.open?'':' hidden';
+    var detail='<div class="detail"'+open+'>'
+      +'<h3>Meets</h3><ul>'+j.met.map(function(x){return'<li>'+esc(x)+'</li>'}).join('')+'</ul>'
+      +'<h3>Gaps</h3><ul>'+j.missing.map(function(x){return'<li>'+esc(x)+'</li>'}).join('')+'</ul>'
+      +'<h3>Will be sent</h3><dl class="qa">'+j.qa.map(function(p){return'<dt>'+esc(p[0])+'</dt><dd>'+esc(p[1])+'</dd>'}).join('')+'</dl>'
+      +(st==="skipping"?'<div class="tags">'+reasons.map(function(r){return'<button class="tag" data-act="reason" data-i="'+i+'" data-r="'+r+'">'+r+'</button>'}).join('')+'</div>':'')
+      +'</div>';
+    return '<div class="job" data-state="'+(st==="skipping"?"":st)+'" '+(i===cur?'aria-current="true"':'')+'>'
+      +'<div class="row"><span class="score">'+j.score+'</span>'
+      +'<div><p class="title">'+esc(j.title)+' · '+esc(j.co)+'</p>'
+      +'<p class="meta">'+esc(j.loc)+' · '+esc(j.age)+' · '+esc(j.src)+'</p>'
+      +'<p class="why">'+esc(j.why)+' <button class="link" data-act="toggle" data-i="'+i+'">'+(j.open?'Hide details':'Details')+'</button></p></div>'
+      +right+'</div>'+detail+'</div>';
+  }).join('');
+  document.getElementById("count").textContent=jobs.filter(function(j){return !j.state}).length;
+}
+
+listEl.addEventListener("click",function(e){
+  var b=e.target.closest("button[data-act]"); if(!b) return;
+  var i=+b.dataset.i, j=jobs[i]; cur=i;
+  if(b.dataset.act==="approve"){j.state="approved";j.open=false}
+  if(b.dataset.act==="skip"){j.state="skipping";j.open=true}
+  if(b.dataset.act==="reason"){j.state="skipped";j.reason=b.dataset.r;j.open=false}
+  if(b.dataset.act==="undo"){j.state="";j.reason=""}
+  if(b.dataset.act==="toggle"){j.open=!j.open}
+  render();
+});
+
+document.addEventListener("keydown",function(e){
+  var t=e.target.tagName; if(t==="INPUT"||t==="SELECT"||t==="TEXTAREA"||e.metaKey||e.ctrlKey||e.altKey) return;
+  if(location.hash==="#settings"||location.hash==="#profile") return;
+  var j=jobs[cur];
+  if(e.key==="j"&&cur<jobs.length-1){cur++}
+  else if(e.key==="k"&&cur>0){cur--}
+  else if(e.key==="a"&&j&&!j.state){j.state="approved";j.open=false}
+  else if(e.key==="s"&&j&&!j.state){j.state="skipping";j.open=true}
+  else if(e.key==="Enter"&&j){j.open=!j.open}
+  else return;
+  render();
+  var el=listEl.querySelector('[aria-current="true"]'); if(el&&el.scrollIntoView) el.scrollIntoView({block:"nearest"});
+});
+
+document.getElementById("answerForm").addEventListener("submit",function(e){
+  e.preventDefault();
+  var v=document.getElementById("answer").value.trim(); if(!v) return;
+  document.getElementById("needs").innerHTML='<h2>Needs you · 0</h2><p class="state">Saved to the answer bank. The application will continue on the next run.</p>';
+});
+document.getElementById("skipQ").addEventListener("click",function(){
+  document.getElementById("needs").innerHTML='<h2>Needs you · 0</h2><p class="state">Job skipped.</p>';
+});
+/* Settings: stored only in this browser; the real app would write them to its config file. */
+var DEFAULTS={mode:"approve",dryrun:true,cap:10,minscore:75,b_greenhouse:"fill",b_lever:"fill",b_ashby:"stage",b_workable:"stage",
+  alerts:true,engine:"claude",fallback:true,budget:40,digest:"08:00",notify:true,followup:7,demo:"prefer",paused:false};
+var MODES={approve:"Wait for approval",auto:"Automatic on trusted boards",prepare:"Prepare only"};
+var S={}, savedTimer;
+function loadSettings(){
+  try{var r=localStorage.getItem("scout-settings"); if(r) S=JSON.parse(r)||{}}catch(e){S={}}
+  for(var k in DEFAULTS){ if(!(k in S)) S[k]=DEFAULTS[k]; }
+}
+function persist(){
+  try{localStorage.setItem("scout-settings",JSON.stringify(S))}catch(e){}
+  var m=document.getElementById("savedMsg"); m.textContent="Saved.";
+  clearTimeout(savedTimer); savedTimer=setTimeout(function(){m.textContent="Changes save automatically on this device."},1600);
+}
+function applySettings(){
+  document.querySelectorAll("#viewSettings [data-key]").forEach(function(el){
+    var k=el.dataset.key;
+    if(el.type==="radio") el.checked=(S[k]===el.value);
+    else if(el.type==="checkbox") el.checked=!!S[k];
+    else el.value=S[k];
+  });
+  document.getElementById("minVal").textContent=S.minscore;
+  document.getElementById("modeLabel").textContent=MODES[S.mode]||MODES.approve;
+  document.getElementById("pausedLi").hidden=!S.paused;
+  document.getElementById("calls").textContent="14 / "+S.budget;
+}
+document.getElementById("viewSettings").addEventListener("change",function(e){
+  var el=e.target.closest("[data-key]"); if(!el) return; var k=el.dataset.key;
+  if(el.type==="radio"){ if(el.checked) S[k]=el.value; }
+  else if(el.type==="checkbox") S[k]=el.checked;
+  else if(el.type==="number"||el.type==="range"){ var n=Number(el.value); S[k]=isFinite(n)&&el.value!==""?n:DEFAULTS[k]; }
+  else S[k]=el.value;
+  applySettings(); persist();
+});
+document.getElementById("viewSettings").addEventListener("input",function(e){
+  if(e.target.type==="range"){document.getElementById("minVal").textContent=e.target.value}
+});
+document.getElementById("resetBtn").addEventListener("click",function(){
+  S={}; for(var k in DEFAULTS){S[k]=DEFAULTS[k]} applySettings(); persist();
+});
+/* Profile: every point is stored once. Wording adapts to a job's keywords, but only with terms the user lists as true. */
+function mk(text,allowed,variants,status){return {text:text,allowed:allowed||[],variants:variants||[],status:status||"confirmed"}}
+function vr(text,keys){return {text:text,keys:keys}}
+var SAMPLE={
+  "identity": {
+    "name": "Alex Rivera",
+    "location": "Berlin, Germany",
+    "phone": "+49 30 0000 0000",
+    "email": "alex.rivera@example.com",
+    "github": "github.com/example-alex",
+    "linkedin": "https://www.linkedin.com/in/example-alex",
+    "portfolio": "alex-rivera.example.com"
+  },
+  "education": {
+    "degree": "Bachelor of Science in Computer Science",
+    "dates": "Sep 2019 – Jun 2023",
+    "school": "Example Technical University",
+    "grade": "GPA: 3.7 / 4.0"
+  },
+  "summary": "Software Engineer at Harbor Systems building a booking platform in TypeScript and Node.js, after an internship building React web apps. Also builds backend services in Go through personal projects.",
+  "skills": [
+    [
+      "Languages",
+      "TypeScript, JavaScript (ES6+), Go"
+    ],
+    [
+      "Frontend",
+      "React, Next.js, Redux Toolkit, Tailwind CSS"
+    ],
+    [
+      "Backend & APIs",
+      "Node.js, Express, REST APIs, WebSockets"
+    ],
+    [
+      "Data & Messaging",
+      "PostgreSQL, Redis, Kafka, Prisma"
+    ]
+  ],
+  "experience": [
+    {
+      "title": "Software Engineer",
+      "org": "Harbor Systems",
+      "dates": "Jul 2023 – Present",
+      "place": "Berlin, Germany",
+      "points": [
+        {
+          "text": "Built the booking flow for a travel platform used by partner hotels, as one of four engineers.",
+          "allowed": [
+            "React",
+            "Node.js",
+            "TypeScript",
+            "REST APIs"
+          ],
+          "variants": [
+            {
+              "text": "Built the booking flow for a travel platform used by partner hotels with React, Node.js and REST APIs, as one of four engineers.",
+              "keys": [
+                "REST APIs",
+                "Node.js"
+              ]
+            }
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "Cut the booking page's load time from about 4.2 seconds to 1.8 by splitting the app and caching hotel data, together with the backend team.",
+          "allowed": [
+            "performance",
+            "caching",
+            "code splitting",
+            "Redis"
+          ],
+          "variants": [
+            {
+              "text": "Cut the booking page's load time from about 4.2 seconds to 1.8 by code splitting and caching hotel data in Redis, together with the backend team.",
+              "keys": [
+                "code splitting",
+                "Redis"
+              ]
+            }
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "Designed the retry and error screens so a failed payment never leaves a guest unsure whether they were charged.",
+          "allowed": [
+            "React",
+            "error handling"
+          ],
+          "variants": [],
+          "status": "confirmed"
+        },
+        {
+          "text": "Replaced polling with live availability updates, so a room that sells out disappears for other guests within seconds.",
+          "allowed": [
+            "WebSockets",
+            "real-time"
+          ],
+          "variants": [
+            {
+              "text": "Replaced polling with WebSocket updates, so a room that sells out disappears for other guests within seconds.",
+              "keys": [
+                "WebSockets"
+              ]
+            }
+          ],
+          "status": "confirmed"
+        }
+      ]
+    },
+    {
+      "title": "Web Developer Intern",
+      "org": "Brightpath Digital",
+      "dates": "Jan 2023 – Jun 2023",
+      "place": "Berlin, Germany",
+      "points": [
+        {
+          "text": "Built responsive dashboards for the agency's clients with React and Tailwind CSS.",
+          "allowed": [
+            "React",
+            "Tailwind CSS",
+            "responsive design"
+          ],
+          "variants": [],
+          "status": "confirmed"
+        },
+        {
+          "text": "Connected the dashboards to REST APIs with consistent loading and error states.",
+          "allowed": [
+            "REST APIs",
+            "React"
+          ],
+          "variants": [],
+          "status": "confirmed"
+        },
+        {
+          "text": "Split the dashboard code so each report loads only when opened.",
+          "allowed": [
+            "code splitting",
+            "lazy loading",
+            "performance"
+          ],
+          "variants": [
+            {
+              "text": "Used code splitting and lazy loading so each report loads only when opened.",
+              "keys": [
+                "code splitting",
+                "lazy loading"
+              ]
+            }
+          ],
+          "status": "confirmed"
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "title": "Message Queue",
+      "stack": "Go, HTTP API",
+      "link": "github.com/example-alex/message-queue",
+      "points": [
+        {
+          "text": "Built a message queue with an HTTP API for publishing, claiming and acknowledging messages across named queues.",
+          "allowed": [
+            "Go",
+            "message queue",
+            "HTTP API"
+          ],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Leased each claimed message for a set time and requeued it if unacknowledged, so a stalled consumer's message is delivered again.",
+          "allowed": [
+            "Go",
+            "message queue",
+            "retries"
+          ],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Moved messages that failed three deliveries to a dead-letter list so they stop retrying, and exposed per-queue counts.",
+          "allowed": [
+            "dead-letter queue",
+            "message queue"
+          ],
+          "variants": [
+            {
+              "text": "Moved messages that failed three deliveries to a dead-letter queue (DLQ) so they stop retrying, and exposed per-queue counts.",
+              "keys": [
+                "dead-letter queue",
+                "DLQ"
+              ]
+            }
+          ],
+          "status": "from code"
+        }
+      ]
+    },
+    {
+      "title": "Team Chat",
+      "stack": "Next.js, React, Node.js, TypeScript, Redis, PostgreSQL",
+      "link": "github.com/example-alex/team-chat",
+      "live": "team-chat.example.com",
+      "points": [
+        {
+          "text": "Built a team chat app end to end, with channels, roles, invite links and direct messages.",
+          "allowed": [
+            "Next.js",
+            "React",
+            "Node.js",
+            "TypeScript",
+            "full-stack"
+          ],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Separated live delivery from saving, so the database can fall behind without slowing the live feed.",
+          "allowed": [
+            "Redis",
+            "PostgreSQL",
+            "WebSockets",
+            "real-time"
+          ],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Made the storage worker pause and resume after a failed write instead of crash-looping on one bad message.",
+          "allowed": [
+            "PostgreSQL",
+            "error handling"
+          ],
+          "variants": [],
+          "status": "from code"
+        }
+      ]
+    },
+    {
+      "title": "Rate-Limited Gateway",
+      "stack": "Go, PostgreSQL, REST APIs",
+      "link": "github.com/example-alex/gateway",
+      "points": [
+        {
+          "text": "Built a gateway that routes each tenant's traffic to its services, with roles and API keys managed through an admin API.",
+          "allowed": [
+            "Go",
+            "multi-tenant",
+            "API keys",
+            "REST APIs",
+            "PostgreSQL"
+          ],
+          "variants": [],
+          "status": "from code"
+        },
+        {
+          "text": "Applied rate limits separately to each tenant and paused requests to failing services before probing for recovery.",
+          "allowed": [
+            "rate limiting",
+            "circuit breaker",
+            "Go"
+          ],
+          "variants": [
+            {
+              "text": "Applied rate limiting separately to each tenant and added a circuit breaker that pauses requests to failing services before probing for recovery.",
+              "keys": [
+                "rate limiting",
+                "circuit breaker"
+              ]
+            }
+          ],
+          "status": "from code"
+        },
+        {
+          "text": "Recorded API usage in the background, dropping and counting overflow instead of slowing requests down.",
+          "allowed": [
+            "Go",
+            "PostgreSQL",
+            "analytics"
+          ],
+          "variants": [],
+          "status": "from code"
+        }
+      ]
+    }
+  ],
+  "never": [
+    "An unfinished side project that is not defensible in an interview"
+  ]
+};
+var STATUSES=["confirmed","from code","hold","excluded"];
+var JD="TypeScript, Node.js, WebSockets, Kafka, PostgreSQL, rate limiting, Kubernetes";
+var P, ed=null, armed=null, pMsg="Edits save on this device. Every resume is built from this page.", pTimer;
+function clone(o){return JSON.parse(JSON.stringify(o))}
+function rx(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}
+function lc(s){return String(s).toLowerCase()}
+function terms(s){return String(s||"").split(/[,\n]+/).map(function(t){return t.trim()}).filter(Boolean)}
+function usable(p){return p.status==="confirmed"||p.status==="from code"}
+function hasWord(text,k){return new RegExp("(^|[^a-z0-9])"+rx(k)+"(?=$|[^a-z0-9])","i").test(text)}
+function hasTerm(list,k){return list.some(function(a){return lc(a)===k})}
+function loadProfile(){
+  try{var r=localStorage.getItem("scout-profile"); if(r) P=JSON.parse(r)}catch(e){P=null}
+  if(!P||!P.experience||!P.projects||!P.skills) P=clone(SAMPLE);
+  if(!P.never) P.never=SAMPLE.never;
+  if(!P.identity) P.identity=clone(SAMPLE.identity);
+  if(!P.education) P.education=clone(SAMPLE.education);
+}
+function saveProfile(){
+  try{localStorage.setItem("scout-profile",JSON.stringify(P))}catch(e){}
+  pMsg="Saved."; var m=document.getElementById("pSaved"); if(m) m.textContent=pMsg;
+  clearTimeout(pTimer); pTimer=setTimeout(function(){
+    pMsg="Edits save on this device. Every resume is built from this page.";
+    var n=document.getElementById("pSaved"); if(n) n.textContent=pMsg;
+  },1600);
+}
+function hl(text,keys){
+  if(!keys.length) return esc(text);
+  var re=new RegExp("(^|[^A-Za-z0-9])("+keys.slice().sort(function(a,b){return b.length-a.length}).map(rx).join("|")+")(?=$|[^A-Za-z0-9])","gi");
+  var out="",last=0,m;
+  while((m=re.exec(text))){var s=m.index+m[1].length; out+=esc(text.slice(last,s))+"<mark>"+esc(m[2])+"</mark>"; last=s+m[2].length}
+  return out+esc(text.slice(last));
+}
+function scorePoint(p,keys){
+  var best=null,bn=0;
+  p.variants.forEach(function(v){
+    var n=v.keys.filter(function(k){return keys.indexOf(lc(k))>-1}).length;
+    if(n>bn){bn=n;best=v}
+  });
+  var text=best?best.text:p.text;
+  var matched=keys.filter(function(k){return hasTerm(p.allowed,k)||hasWord(text,k)});
+  return {text:text,usedVariant:!!best,matched:matched};
+}
+function previewHtml(){
+  var keys=[]; terms(JD).forEach(function(t){var k=lc(t); if(keys.indexOf(k)<0) keys.push(k)});
+  if(!keys.length) return '<p class="small">Add keywords from a job description to see which points and wording would be used.</p>';
+  var seen={};
+  function pick(en,limit){
+    var arr=[]; en.points.forEach(function(p,i){ if(usable(p)&&p.text) arr.push({p:p,i:i,s:scorePoint(p,keys)}) });
+    arr.sort(function(a,b){return b.s.matched.length-a.s.matched.length||a.i-b.i});
+    return arr.slice(0,limit);
+  }
+  function lines(arr){
+    return "<ul>"+arr.map(function(x){
+      x.s.matched.forEach(function(k){seen[k]=true});
+      return "<li>"+hl(x.s.text,keys)+(x.s.usedVariant?' <span class="small">· alternate wording</span>':"")+"</li>";
+    }).join("")+"</ul>";
+  }
+  var out='<p class="small" id="pvCount"></p>';
+  out+='<p class="t">Experience</p>';
+  P.experience.forEach(function(en){
+    out+='<p class="small">'+esc(en.title)+', '+esc(en.org)+'</p>'+lines(pick(en,4));
+  });
+  var ranked=P.projects.map(function(en,i){
+    var top=pick(en,3); var total=top.reduce(function(a,x){return a+x.s.matched.length},0);
+    return {en:en,i:i,top:top,total:total};
+  }).sort(function(a,b){return b.total-a.total||a.i-b.i});
+  out+='<p class="t">Projects</p>';
+  ranked.slice(0,4).forEach(function(r){ out+='<p class="small">'+esc(r.en.title)+'</p>'+lines(r.top) });
+  var left=ranked.slice(4).map(function(r){return r.en.title});
+  if(left.length) out+='<p class="small">Left out for this job: '+esc(left.join(", "))+'</p>';
+  var missing=[], found=0;
+  keys.forEach(function(k){
+    var inSkills=P.skills.some(function(r){return hasWord(r[1],k)});
+    if(seen[k]||inSkills) found++; else missing.push(k);
+  });
+  out=out.replace('<p class="small" id="pvCount"></p>','<p class="small">'+found+' of '+keys.length+' keywords are supported by your profile.'+(missing.length?' Not in your profile, so not added: '+esc(missing.join(", "))+'.':'')+'</p>');
+  return out;
+}
+/* Resume: built exactly like the SKILL folder's template. The preamble is copied unchanged; only the content between \begin{document} and \end{document} varies, and the stretchable gaps fill the page. */
+var TEX_PRE=String.raw`\documentclass[letterpaper,10pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\ifdefined\pdfglyphtounicode
+  \input{glyphtounicode}
+\fi
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\setlength{\footskip}{4.08003pt}
+
+% Adjust margins
+\addtolength{\oddsidemargin}{-0.65in}
+\addtolength{\evensidemargin}{-0.65in}
+\addtolength{\textwidth}{1.3in}
+\addtolength{\topmargin}{-0.65in}
+\addtolength{\textheight}{1.4in}
+
+\urlstyle{same}
+
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Sections formatting
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+% Ensure that generate pdf is machine readable/ATS parsable
+\ifdefined\pdfgentounicode
+  \pdfgentounicode=1
+\fi
+
+%-------------------------
+% Custom commands
+\newcommand{\resumeItem}[1]{
+\item\small{
+    {#1 \vspace{-2pt}}
+  }
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}
+\item
+  \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \textbf{#1} & #2 \\
+    \textit{\small#3} & \textit{\small #4} \\
+  \end{tabular*}\vspace{-4pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+\item
+  \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+    \small#1 & #2 \\
+  \end{tabular*}\vspace{-8pt}
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-2pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{
+\begin{itemize}[leftmargin=0.15in, label={}]}
+    \newcommand{\resumeSubHeadingListEnd}{
+  \end{itemize}}
+\newcommand{\resumeItemListStart}{
+  \vspace{-2pt}
+\begin{itemize}[leftmargin=0.3in, itemsep=2pt, parsep=0pt, topsep=0pt]}
+    \newcommand{\resumeItemListEnd}{
+  \end{itemize}\vspace{7pt plus 1fill minus 3pt}}
+
+%-------------------------------------------
+%%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+`;
+var LIMIT=76.5; /* calibrated on the real general resume: 76.3 fits one page, 77.3 does not */
+var TEXMAP={"\\":"\\textbackslash{}","&":"\\&","%":"\\%","$":"\\$","#":"\\#","_":"\\_","{":"\\{","}":"\\}","~":"\\textasciitilde{}","^":"\\textasciicircum{}"};
+function tex(s){return String(s==null?"":s).replace(/[\\&%$#_{}~^]/g,function(c){return TEXMAP[c]}).replace(/\u2014/g,"---").replace(/\u2013/g,"--").replace(/[\u2018\u2019]/g,"'").replace(/[\u201C\u201D]/g,'"')}
+function urlOf(s){s=String(s); return /^https?:\/\//.test(s)?s:"https://"+s}
+function disp(s){return String(s).replace(/^https?:\/\//,"").replace(/^www\./,"")}
+function hrefEsc(u){return u.replace(/%/g,"\\%").replace(/#/g,"\\#")}
+function hlink(url){return String.raw`\href{${hrefEsc(urlOf(url))}}{\textcolor{blue}{${tex(disp(url))}}}`}
+function jdKeys(){var keys=[]; terms(JD).forEach(function(t){var k=lc(t); if(keys.indexOf(k)<0) keys.push(k)}); return keys}
+function selectPoints(en,limit,keys){
+  var arr=[]; en.points.forEach(function(p,i){ if(usable(p)&&p.text) arr.push({i:i,s:scorePoint(p,keys)}) });
+  var top=arr.slice().sort(function(a,b){return b.s.matched.length-a.s.matched.length||a.i-b.i}).slice(0,limit);
+  top.sort(function(a,b){return a.i-b.i});
+  return top;
+}
+function nl(len,per){return Math.max(1,Math.ceil(len/per))}
+function estLines(m){
+  var n=3.6+1.8+nl(m.summary.length,125)+1.8;
+  m.skills.forEach(function(r){n+=nl(r[0].length+2+r[1].length,125)});
+  n+=1.8; m.experience.forEach(function(e){n+=2.3; e.points.forEach(function(t){n+=nl(t.length,118)+0.25})});
+  n+=1.8; m.projects.forEach(function(p){n+=1.4; p.points.forEach(function(t){n+=nl(t.length,118)+0.25})});
+  n+=1.8+2.3;
+  return Math.round(n*10)/10;
+}
+function resumeModel(){
+  var keys=jdKeys();
+  var m={id:P.identity,edu:P.education,summary:P.summary,skills:[],experience:[],projects:[]};
+  var rows=P.skills.map(function(r,i){
+    var items=r[1].split(",").map(function(x){return x.trim()}).filter(Boolean);
+    var hit=items.map(function(x){return keys.indexOf(lc(x))>-1?1:0});
+    var order=items.map(function(x,j){return j}).sort(function(a,b){return hit[b]-hit[a]||a-b});
+    return {i:i,label:r[0],items:order.map(function(j){return items[j]}),score:hit.reduce(function(a,b){return a+b},0)};
+  }).sort(function(a,b){return b.score-a.score||a.i-b.i});
+  /* The Languages row always stays first, as in the template. */
+  rows.sort(function(a,b){var la=/^languages$/i.test(a.label)?0:1, lb=/^languages$/i.test(b.label)?0:1; return la-lb});
+  m.skills=rows.map(function(r){return [r.label,r.items.join(", ")]});
+  P.experience.forEach(function(en){
+    if(!en.title) return;
+    m.experience.push({title:en.title,org:en.org,dates:en.dates,place:en.place,points:selectPoints(en,4,keys).map(function(x){return x.s.text})});
+  });
+  var ranked=P.projects.filter(function(en){return en.title}).map(function(en,i){
+    var top=selectPoints(en,3,keys);
+    return {en:en,i:i,top:top,total:top.reduce(function(a,x){return a+x.s.matched.length},0)};
+  }).sort(function(a,b){return b.total-a.total||a.i-b.i});
+  m.leftOut=[];
+  ranked.forEach(function(r){
+    var proj={title:r.en.title,stack:r.en.stack,link:r.en.link,live:r.en.live,note:r.en.note,points:r.top.map(function(x){return x.s.text})};
+    if(m.projects.length>=5){m.leftOut.push(r.en.title);return}
+    m.projects.push(proj);
+    if(m.projects.length>3&&estLines(m)>LIMIT){m.projects.pop();m.leftOut.push(r.en.title)}
+  });
+  m.est=estLines(m);
+  return m;
+}
+function buildTex(m){
+  var id=m.id, L=[];
+  var c1=[]; if(id.location) c1.push(tex(id.location)); if(id.phone) c1.push(tex(id.phone));
+  if(id.email) c1.push(String.raw`\href{mailto:${id.email}}{\textcolor{blue}{${tex(id.email)}}}`);
+  var c2=[id.github,id.linkedin,id.portfolio].filter(Boolean).map(hlink);
+  L.push(String.raw`%----------HEADING----------`);
+  L.push(String.raw`\begin{center}`);
+  L.push(String.raw`  {\Huge \scshape ${tex(id.name)}} \\ \vspace{4pt}`);
+  if(c1.length) L.push(String.raw`  \small ${c1.join(" $|$ ")} \\ \vspace{2pt}`);
+  if(c2.length) L.push(String.raw`  \small ${c2.join(" $|$\n  ")}`);
+  L.push(String.raw`\end{center}`);
+  L.push(String.raw`\vspace{-4pt plus 3fill}`);
+  L.push(String.raw`%-----------SUMMARY-----------`);
+  L.push(String.raw`\section{Summary}`);
+  L.push(String.raw`\small{${tex(m.summary)}}`);
+  L.push(String.raw`\vspace{8pt plus 3fill minus 4pt}`);
+  L.push("");
+  L.push(String.raw`%-----------TECHNICAL SKILLS-----------`);
+  L.push(String.raw`\section{Technical Skills}`);
+  L.push(String.raw`\begin{itemize}[leftmargin=0.15in, label={}]`);
+  L.push(String.raw`    \small{`);
+  L.push(String.raw`    \item{`);
+  m.skills.forEach(function(r){L.push(String.raw`        \textbf{${tex(r[0])}}{: ${tex(r[1])}} \\`)});
+  L.push(String.raw`    }}`);
+  L.push(String.raw`\end{itemize}`);
+  L.push(String.raw`\vspace{1pt plus 3fill minus 4pt}`);
+  L.push("");
+  L.push(String.raw`%-----------EXPERIENCE-----------`);
+  L.push(String.raw`\section{Experience}`);
+  L.push(String.raw`\resumeSubHeadingListStart`);
+  m.experience.forEach(function(e){
+    L.push("");
+    L.push(String.raw`\resumeSubheading`);
+    L.push(String.raw`{${tex(e.title)}}{${tex(e.dates)}}`);
+    L.push(String.raw`{${tex(e.org)}}{${tex(e.place)}}`);
+    L.push(String.raw`\resumeItemListStart`);
+    e.points.forEach(function(t){L.push(String.raw`\resumeItem{${tex(t)}}`)});
+    L.push(String.raw`\resumeItemListEnd`);
+  });
+  L.push("");
+  L.push(String.raw`\resumeSubHeadingListEnd`);
+  L.push(String.raw`\vspace{-4pt plus 2fill minus 2pt}`);
+  L.push("");
+  L.push(String.raw`%-----------PROJECTS-----------`);
+  L.push(String.raw`\section{Projects}`);
+  L.push(String.raw`\resumeSubHeadingListStart`);
+  m.projects.forEach(function(p){
+    var parts=[String.raw`\textbf{${tex(p.title)}}`];
+    if(p.stack) parts.push(String.raw`\emph{${tex(p.stack)}}`);
+    if(p.live) parts.push(String.raw`\href{${hrefEsc(urlOf(p.live))}}{\underline{Live}}`);
+    if(p.link) parts.push(String.raw`\href{${hrefEsc(urlOf(p.link))}}{\underline{Code}}`);
+    if(p.note) parts.push(String.raw`\emph{${tex(p.note)}}`);
+    L.push("");
+    L.push(String.raw`\resumeProjectHeading`);
+    L.push(String.raw`{${parts.join(" $|$ ")}}{}`);
+    L.push(String.raw`\resumeItemListStart`);
+    p.points.forEach(function(t){L.push(String.raw`\resumeItem{${tex(t)}}`)});
+    L.push(String.raw`\resumeItemListEnd`);
+  });
+  L.push("");
+  L.push(String.raw`\resumeSubHeadingListEnd`);
+  L.push(String.raw`\vspace{-1pt plus 2fill minus 2pt}`);
+  L.push(String.raw`%-----------EDUCATION-----------`);
+  L.push(String.raw`\section{Education}`);
+  L.push(String.raw`\resumeSubHeadingListStart`);
+  L.push(String.raw`\resumeSubheading`);
+  L.push(String.raw`{${tex(m.edu.degree)}}{${tex(m.edu.dates)}}`);
+  L.push(String.raw`{${tex(m.edu.school)}}{${tex(m.edu.grade)}}`);
+  L.push(String.raw`\resumeSubHeadingListEnd`);
+  L.push("");
+  L.push(String.raw`%-------------------------------------------`);
+  L.push(String.raw`\end{document}`);
+  return TEX_PRE+"\n"+L.join("\n")+"\n";
+}
+/* RESUME-CORE-END */
+function sheetHtml(m,keys){
+  var id=m.id;
+  var h='<div class="sheet"><div class="s-name">'+esc(id.name)+'</div><div class="s-c">'+esc([id.location,id.phone,id.email].filter(Boolean).join(" | "))+'<br>'+esc([id.github,id.linkedin,id.portfolio].filter(Boolean).map(disp).join(" | "))+'</div>';
+  h+='<div class="s-h">Summary</div><p>'+hl(m.summary,keys)+'</p>';
+  h+='<div class="s-h">Technical Skills</div>'+m.skills.map(function(r){return '<p><b>'+esc(r[0])+'</b>: '+hl(r[1],keys)+'</p>'}).join("");
+  h+='<div class="s-h">Experience</div>'+m.experience.map(function(e){
+    return '<div class="s-e"><b>'+esc(e.title)+'</b><span>'+esc(e.dates)+'</span></div><div class="s-e s-i"><span>'+esc(e.org)+'</span><span>'+esc(e.place)+'</span></div><ul>'+e.points.map(function(t){return '<li>'+hl(t,keys)+'</li>'}).join("")+'</ul>';
+  }).join("");
+  h+='<div class="s-h">Projects</div>'+m.projects.map(function(p){
+    var bits=['<b>'+esc(p.title)+'</b>']; if(p.stack) bits.push('<i>'+esc(p.stack)+'</i>'); if(p.live) bits.push('<u>Live</u>'); if(p.link) bits.push('<u>Code</u>'); if(p.note) bits.push('<i>'+esc(p.note)+'</i>');
+    return '<p>'+bits.join(" | ")+'</p><ul>'+p.points.map(function(t){return '<li>'+hl(t,keys)+'</li>'}).join("")+'</ul>';
+  }).join("");
+  h+='<div class="s-h">Education</div><div class="s-e"><b>'+esc(m.edu.degree)+'</b><span>'+esc(m.edu.dates)+'</span></div><div class="s-e s-i"><span>'+esc(m.edu.school)+'</span><span>'+esc(m.edu.grade)+'</span></div></div>';
+  return h;
+}
+var CO="";
+function fileName(){
+  var co=CO.replace(/[^A-Za-z0-9]/g,"")||"Company", nm=(P.identity.name||"Resume").replace(/[^A-Za-z0-9]+/g,"_");
+  return nm+"_"+co;
+}
+function renderResume(){
+  var o=document.getElementById("resOut"); if(!o) return;
+  var m=resumeModel(), keys=jdKeys(), src=buildTex(m);
+  var fit=m.est<=LIMIT?"fits on one page":"may run past one page: shorten a point or drop a project";
+  o.innerHTML='<p class="small">Estimated length '+m.est+' of about '+LIMIT+' lines, so it '+fit+'. Projects shown: '+m.projects.length+(m.leftOut.length?' (left out: '+esc(m.leftOut.join(", "))+')':'')+'. This is an estimate. The real check is the page count after compiling.</p>'
+    +sheetHtml(m,keys)
+    +'<div><label class="small" for="texOut">LaTeX source (same template as the SKILL folder)</label><textarea class="fld mono" id="texOut" rows="12" readonly>'+esc(src)+'</textarea></div>'
+    +'<div class="fbtns" style="margin-top:8px"><button class="btn primary" data-a="copytex">Copy LaTeX</button><span class="small" id="copyMsg"></span></div>'
+    +'<p class="small">Compile with pdflatex twice, then check that pdfinfo reports 1 page. If it reports 2, cut the weakest project or shorten bullets. Spacing and fonts stay as they are.</p>';
+  var f=document.getElementById("fileName"); if(f) f.textContent=fileName()+".tex";
+}
+function renderPreview(){var o=document.getElementById("pvOut"); if(o) o.innerHTML=previewHtml(); renderResume()}
+
+function fld(id,label,val,tag){
+  var input=tag==="area"?'<textarea class="fld" id="'+id+'" rows="3">'+esc(val)+'</textarea>':'<input class="fld" id="'+id+'" value="'+esc(val)+'">';
+  return '<div><label for="'+id+'">'+label+'</label>'+input+'</div>';
+}
+function ptView(sec,ei,pi,p){
+  var vn=p.variants.length;
+  return '<div class="pt'+(usable(p)?'':' off')+'"><div><p class="pt-text">'+esc(p.text||"(empty point)")+'</p><div class="pt-meta"><span class="chip">'+esc(p.status)+'</span>'
+    +(p.allowed.length?'<span>Terms: '+esc(p.allowed.join(", "))+'</span>':'')
+    +(vn?'<span>'+vn+' alternate wording'+(vn>1?'s':'')+'</span>':'')
+    +'</div></div><div><button class="link" data-a="edit" data-s="'+sec+'" data-e="'+ei+'" data-p="'+pi+'">Edit</button></div></div>';
+}
+function ptForm(sec,ei,pi){
+  var d=ed.draft, key=sec+ei+"-"+pi;
+  var vh=d.variants.map(function(v,i){
+    return '<div class="vrow">'+fld("pv_t"+i,"Alternate wording",v.text,"area")+fld("pv_k"+i,"Use when the job mentions (comma separated)",v.keys.join(", "))
+      +'<div><button class="link" data-a="rmvar" data-v="'+i+'">Remove this wording</button></div></div>';
+  }).join("");
+  var opts=STATUSES.map(function(s){return '<option value="'+s+'"'+(d.status===s?' selected':'')+'>'+s+'</option>'}).join("");
+  return '<div class="form">'+fld("pf_text","Wording",d.text,"area")
+    +fld("pf_terms","Terms you can truthfully use here (comma separated)",d.allowed.join(", "))
+    +'<div><label for="pf_status">Status</label><select class="fld" id="pf_status">'+opts+'</select><p class="small">Only confirmed and from code points are used in resumes.</p></div>'
+    +vh+'<div><button class="link" data-a="addvar">Add alternate wording</button></div>'
+    +'<div class="fbtns"><button class="btn primary" data-a="save">Save</button><button class="btn" data-a="cancel">Cancel</button><span class="grow"></span>'
+    +'<button class="link" data-a="del" data-s="'+sec+'" data-e="'+ei+'" data-p="'+pi+'">'+(armed===key?"Click again to delete":"Delete point")+'</button></div></div>';
+}
+function headForm(sec,ei){
+  var d=ed.draft, key=sec+ei+"-h";
+  var f=sec==="experience"
+    ? fld("hf_title","Title",d.title)+fld("hf_org","Company",d.org)+fld("hf_dates","Dates",d.dates)+fld("hf_place","Location",d.place)
+    : fld("hf_title","Name",d.title)+fld("hf_stack","Stack",d.stack)+fld("hf_link","Code link",d.link)+fld("hf_live","Live link (optional)",d.live||"")+fld("hf_note","Status note, e.g. In development (optional)",d.note||"");
+  return '<div class="form">'+f+'<div class="fbtns"><button class="btn primary" data-a="save">Save</button><button class="btn" data-a="cancel">Cancel</button><span class="grow"></span>'
+    +'<button class="link" data-a="del" data-s="'+sec+'" data-e="'+ei+'" data-p="-1">'+(armed===key?"Click again to remove":"Remove this entry")+'</button></div></div>';
+}
+function entryHtml(sec,ei,en){
+  var editingHead=ed&&ed.sec===sec&&ed.ei===ei&&ed.pi===-1;
+  var head;
+  if(editingHead) head=headForm(sec,ei);
+  else{
+    var line=sec==="experience"?esc(en.dates)+" · "+esc(en.place):esc(en.stack)+(en.link?" · "+esc(en.link):"");
+    var ttl=sec==="experience"?esc(en.title)+" · "+esc(en.org):esc(en.title);
+    head='<div class="ehead"><div><p class="title">'+ttl+'</p><p class="meta">'+line+'</p></div><button class="link" data-a="edithead" data-s="'+sec+'" data-e="'+ei+'">Edit details</button></div>';
+  }
+  var pts=en.points.map(function(p,pi){
+    return ed&&ed.sec===sec&&ed.ei===ei&&ed.pi===pi?ptForm(sec,ei,pi):ptView(sec,ei,pi,p);
+  }).join("");
+  return '<div class="entry">'+head+pts+'<div class="addrow"><button class="link" data-a="addpt" data-s="'+sec+'" data-e="'+ei+'">Add a point</button></div></div>';
+}
+function sectionHtml(sec,title,addLabel){
+  return '<section><h2>'+title+'</h2><div class="elist">'+P[sec].map(function(en,ei){return entryHtml(sec,ei,en)}).join("")+'</div><button class="btn" data-a="addentry" data-s="'+sec+'">'+addLabel+'</button></section>';
+}
+function renderProfile(){
+  var h='<p class="savedmsg" id="pSaved">'+esc(pMsg)+'</p>';
+  h+='<section><h2>Tailor preview</h2><div class="pbox"><label class="small" for="jdKeys">Keywords from a job description, separated by commas. Wording changes only when a point lists that term as true.</label><textarea class="fld" id="jdKeys" rows="2">'+esc(JD)+'</textarea><div class="pv" id="pvOut"></div></div></section>';
+  h+='<section><h2>Resume for this job</h2><div class="pbox"><label class="small" for="coName">Company, for the file name</label><input class="fld" id="coName" value="'+esc(CO)+'" placeholder="Company"><p class="small">File: <span id="fileName"></span></p><div id="resOut"></div></div></section>';
+  var idRows=[["name","Name"],["location","Location"],["phone","Phone"],["email","Email"],["github","GitHub"],["linkedin","LinkedIn"],["portfolio","Portfolio"]];
+  h+='<section><h2>Contact</h2>'+idRows.map(function(r){
+    return '<div class="kv"><label class="small" for="id_'+r[0]+'">'+r[1]+'</label><input class="fld" id="id_'+r[0]+'" data-f="id" data-k="'+r[0]+'" value="'+esc(P.identity[r[0]]||"")+'"></div>';
+  }).join("")+'</section>';
+  h+='<section><h2>Summary</h2><textarea class="fld" rows="3" data-f="sum" aria-label="Summary">'+esc(P.summary)+'</textarea></section>';
+  h+='<section><h2>Technical skills</h2>'+P.skills.map(function(r,i){
+    return '<div class="kv"><input class="fld" data-f="skl" data-i="'+i+'" value="'+esc(r[0])+'" aria-label="Skill row name"><input class="fld" data-f="skv" data-i="'+i+'" value="'+esc(r[1])+'" aria-label="Skills in this row"></div>';
+  }).join("")+'</section>';
+  h+=sectionHtml("experience","Experience","Add experience");
+  h+=sectionHtml("projects","Projects","Add project");
+  var eduRows=[["degree","Degree"],["dates","Dates"],["school","Institution"],["grade","Grade"]];
+  h+='<section><h2>Education</h2>'+eduRows.map(function(r){
+    return '<div class="kv"><label class="small" for="ed_'+r[0]+'">'+r[1]+'</label><input class="fld" id="ed_'+r[0]+'" data-f="edu" data-k="'+r[0]+'" value="'+esc(P.education[r[0]]||"")+'"></div>';
+  }).join("")+'</section>';
+  h+='<section><h2>Never used</h2><ul class="small">'+P.never.map(function(n){return'<li>'+esc(n)+'</li>'}).join("")+'</ul></section>';
+  h+='<section><button class="link" data-a="reset">Reset profile to the sample</button></section>';
+  document.getElementById("viewProfile").innerHTML=h;
+  renderPreview();
+}
+function val(id){var e=document.getElementById(id); return e?e.value:""}
+function syncDraft(){
+  if(!ed) return; var d=ed.draft;
+  if(ed.pi===-1){
+    d.title=val("hf_title");
+    if(ed.sec==="experience"){d.org=val("hf_org");d.dates=val("hf_dates");d.place=val("hf_place")}
+    else{d.stack=val("hf_stack");d.link=val("hf_link");d.live=val("hf_live");d.note=val("hf_note")}
+  }else{
+    d.text=val("pf_text").trim(); d.allowed=terms(val("pf_terms")); d.status=val("pf_status")||d.status;
+    d.variants=d.variants.map(function(v,i){return {text:val("pv_t"+i).trim(),keys:terms(val("pv_k"+i))}});
+  }
+}
+function pruneEmpty(){
+  /* A new point or entry that was never filled in is dropped when the form is cancelled. */
+  if(!ed) return;
+  var en=P[ed.sec][ed.ei]; if(!en) return;
+  if(ed.pi>=0){ if(en.points[ed.pi]&&!en.points[ed.pi].text) en.points.splice(ed.pi,1) }
+  else if(!en.title&&!en.points.length) P[ed.sec].splice(ed.ei,1);
+}
+var pv=document.getElementById("viewProfile");
+pv.addEventListener("click",function(e){
+  var b=e.target.closest("[data-a]"); if(!b) return;
+  var a=b.dataset.a, s=b.dataset.s, ei=+b.dataset.e, pi=+b.dataset.p;
+  if(a==="copytex"){
+    var ta=document.getElementById("texOut"), msg=document.getElementById("copyMsg");
+    function fallback(){ta.focus();ta.select();if(msg) msg.textContent="Selected. Press copy on your keyboard."}
+    try{navigator.clipboard.writeText(ta.value).then(function(){if(msg) msg.textContent="Copied."},fallback)}catch(err){fallback()}
+    return;
+  }
+  if(a==="edit"){pruneEmpty();armed=null;ed={sec:s,ei:ei,pi:pi,draft:clone(P[s][ei].points[pi])}}
+  else if(a==="edithead"){pruneEmpty();armed=null;var en=P[s][ei];var d=clone(en);delete d.points;ed={sec:s,ei:ei,pi:-1,draft:d}}
+  else if(a==="save"){
+    syncDraft();
+    if(ed.pi===-1){var en2=P[ed.sec][ed.ei];for(var k in ed.draft){en2[k]=ed.draft[k]}}
+    else{P[ed.sec][ed.ei].points[ed.pi]=ed.draft}
+    ed=null;armed=null;saveProfile();
+  }
+  else if(a==="cancel"){pruneEmpty();ed=null;armed=null}
+  else if(a==="addvar"){syncDraft();ed.draft.variants.push({text:"",keys:[]})}
+  else if(a==="rmvar"){syncDraft();ed.draft.variants.splice(+b.dataset.v,1)}
+  else if(a==="addpt"){pruneEmpty();var list=P[s][ei].points;list.push(mk("",[],[],"confirmed"));ed={sec:s,ei:ei,pi:list.length-1,draft:clone(list[list.length-1])};armed=null}
+  else if(a==="addentry"){
+    pruneEmpty();
+    var blank=s==="experience"?{title:"",org:"",dates:"",place:"",points:[]}:{title:"",stack:"",link:"",points:[]};
+    P[s].push(blank);var n=P[s].length-1;var dd=clone(blank);delete dd.points;ed={sec:s,ei:n,pi:-1,draft:dd};armed=null;
+  }
+  else if(a==="del"){
+    var key=s+ei+"-"+(pi===-1?"h":pi);
+    if(armed===key){
+      if(pi===-1) P[s].splice(ei,1); else P[s][ei].points.splice(pi,1);
+      ed=null;armed=null;saveProfile();
+    }else{syncDraft();armed=key}
+  }
+  else if(a==="reset"){P=clone(SAMPLE);ed=null;armed=null;saveProfile()}
+  renderProfile();
+});
+pv.addEventListener("change",function(e){
+  var t=e.target, f=t.dataset.f; if(!f) return;
+  if(f==="sum") P.summary=t.value;
+  else if(f==="skl") P.skills[+t.dataset.i][0]=t.value;
+  else if(f==="skv") P.skills[+t.dataset.i][1]=t.value;
+  else if(f==="id") P.identity[t.dataset.k]=t.value;
+  else if(f==="edu") P.education[t.dataset.k]=t.value;
+  saveProfile(); renderPreview();
+});
+pv.addEventListener("input",function(e){
+  if(e.target.id==="jdKeys"){JD=e.target.value; renderPreview()}
+  if(e.target.id==="coName"){CO=e.target.value; var f=document.getElementById("fileName"); if(f) f.textContent=fileName()+".tex"}
+});
+
+function route(){
+  var h=location.hash.replace("#","");
+  if(h!=="profile"&&h!=="settings") h="digest";
+  ["digest","profile","settings"].forEach(function(v){
+    var name=v.charAt(0).toUpperCase()+v.slice(1);
+    document.getElementById("view"+name).hidden=(v!==h);
+    var n=document.getElementById("nav"+name);
+    if(v===h) n.setAttribute("aria-current","page"); else n.removeAttribute("aria-current");
+  });
+}
+window.addEventListener("hashchange",route);
+loadSettings(); applySettings(); loadProfile(); renderProfile(); route();
+render();
+</script>
