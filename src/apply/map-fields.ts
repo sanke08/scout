@@ -60,9 +60,11 @@ function isApproved(entry: AnswerEntry): boolean {
 }
 
 /**
- * Finds the approved bank entry for a question: same words, or one question contains the other
- * (both at least 12 characters, so a short word cannot match everything).
- * Example: the bank question "What is your notice period?" matches the field "Notice period".
+ * Finds the approved bank entry for a question: the same words, or one question contained in the
+ * other when the shorter one is at least three quarters as long as the longer (so "Do you have a
+ * degree?" is never used for "Do you have a degree in computer science?").
+ * Example: the bank question "Are you authorised to work in the EU?" matches the field
+ * "Are you authorised to work in the EU? *" and not "Are you authorised to work in Germany?".
  */
 export function findBankAnswer(question: string, bank: AnswerEntry[]): AnswerEntry | undefined {
   const wanted = normaliseText(question);
@@ -72,8 +74,10 @@ export function findBankAnswer(question: string, bank: AnswerEntry[]): AnswerEnt
   if (exact !== undefined) return exact;
   return approved.find((entry) => {
     const stored = normaliseText(entry.question);
-    if (stored.length < 12 || wanted.length < 12) return false;
-    return stored.includes(wanted) || wanted.includes(stored);
+    const shorter = stored.length < wanted.length ? stored : wanted;
+    const longer = stored.length < wanted.length ? wanted : stored;
+    if (shorter.length < 12 || shorter.length < longer.length * 0.75) return false;
+    return longer.includes(shorter);
   });
 }
 

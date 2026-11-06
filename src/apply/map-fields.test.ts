@@ -164,6 +164,16 @@ describe("answer bank helpers", () => {
     );
     expect(findBankAnswer("period?", profile.answerBank)).toBeUndefined();
     expect(findBankAnswer("Why do you like cats?", profile.answerBank)).toBeUndefined();
+    const degree: AnswerEntry[] = [
+      {
+        question: "Do you have a degree?",
+        kind: "factual",
+        answer: "Yes.",
+        approvedOn: "2026-01-15",
+      },
+    ];
+    expect(findBankAnswer("Do you have a degree in computer science?", degree)).toBeUndefined();
+    expect(findBankAnswer("Do you have a degree? *", degree)?.answer).toBe("Yes.");
   });
 
   it("matchOption finds equal and starts-with options and nothing else", () => {

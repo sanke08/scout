@@ -333,6 +333,17 @@ describe("verification", () => {
     expect((await runApplication(args)).outcome).toBe("unverified");
   });
 
+  it.each([
+    "Your application was not successfully submitted. Please try again.",
+    "Your application is incomplete. Fix the errors below.",
+    "We could not submit your application. Application received: no.",
+  ])("does not mistake a failure message for a confirmation: %s", async (text) => {
+    const driver = driverFor("greenhouse-style", { confirmationText: text });
+    const { args, jobs } = setup({ driver });
+    expect((await runApplication(args)).outcome).toBe("unverified");
+    expect(jobs.get("job-1")?.status).toBe("unverified");
+  });
+
   it("marks applied only when a confirmation message is seen", async () => {
     const driver = driverFor("greenhouse-style", {
       confirmationText: "We have received your application.",

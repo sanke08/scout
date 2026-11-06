@@ -79,9 +79,18 @@ export function detectPageBlocker(text: string, html: string): PageBlocker | und
 
 /** Patterns of real confirmation messages. A bare "thank you" is not enough. */
 const CONFIRMATION_PATTERN =
-  /thank you for (applying|your application|submitting)|application (has been |was )?(received|submitted|sent)|we(?:'ve| have) received your application|successfully submitted|your application is in/i;
+  /thank you for (applying|your application|submitting)|application (has been |was )?(received|submitted|sent)|we(?:'ve| have) received your application|successfully submitted/i;
 
-/** True when the text after a submit is a real confirmation of the application. */
+/** Wording that turns a confirmation-looking phrase into a failure ("not successfully submitted"). */
+const NEGATED_CONFIRMATION_PATTERN =
+  /\b(not|never|unable to|could ?n['\u2019]?t|can ?not|can['\u2019]?t|wasn['\u2019]?t|hasn['\u2019]?t|failed to)\b[^.!?]{0,40}\b(submit(ted)?|receive(d)?|send|sent|apply(ing)?)\b|try again|something went wrong|incomplete/i;
+
+/**
+ * True when the text after a submit is a real confirmation of the application. A message that
+ * says the submit failed ("was not successfully submitted", "try again") is never a confirmation.
+ * Example: "Thank you for applying!" is true; "Your application was not successfully submitted."
+ * is false.
+ */
 export function looksLikeConfirmation(text: string): boolean {
-  return CONFIRMATION_PATTERN.test(text);
+  return CONFIRMATION_PATTERN.test(text) && !NEGATED_CONFIRMATION_PATTERN.test(text);
 }
