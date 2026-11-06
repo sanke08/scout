@@ -17,7 +17,7 @@ export const DEFAULT_USER_AGENT = "scout-job-pipeline (personal use)";
 export const DEFAULT_TIMEOUT_MILLISECONDS = 20_000;
 
 /** The largest response body Scout accepts: 5 megabytes. */
-export const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024;
+export const DEFAULT_MAX_BODY_BYTES = 25 * 1024 * 1024;
 
 /** How long Scout waits between two requests to the same host (in milliseconds). */
 export const DEFAULT_HOST_DELAY_MILLISECONDS = 1000;

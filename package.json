@@ -15,7 +15,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run typecheck && npm run lint && npm run test && npm run format:check",
-    "smoke:resume": "tsx src/resume/smoke.ts"
+    "smoke:resume": "tsx src/resume/smoke.ts",
+    "smoke:discovery": "tsx src/discovery/smoke.ts"
   },
   "license": "MIT",
   "type": "module",
