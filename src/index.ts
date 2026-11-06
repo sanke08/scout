@@ -10,6 +10,7 @@ import { Command, CommanderError } from "commander";
 import { registerCommands, type ApplicationOptions } from "./app/index.js";
 import { registerFoldersCommands } from "./app/index.js";
 import { ScoutError } from "./shared/index.js";
+import { registerMailAndNotesCommands } from "./app/index.js";
 
 /** Reads the version from package.json so there is one source of truth. */
 export function readVersion(): string {
@@ -41,6 +42,7 @@ export function buildProgram(overrides: ApplicationOptions = {}): Command {
 
   registerCommands(program, overrides);
   registerFoldersCommands(program, overrides);
+  registerMailAndNotesCommands(program, overrides);
   return program;
 }
 

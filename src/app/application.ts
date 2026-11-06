@@ -45,6 +45,11 @@ import {
   openDatabase,
   type DatabaseSync,
 } from "../store/index.js";
+import {
+  createImapConnector,
+  type ConnectToMailbox,
+  type ImapCredentials,
+} from "../tracking/index.js";
 import { createBoardStore, type BoardStore } from "./boards-store.js";
 import { readModelCallsToday, syncJobFolder, withFolderSync } from "./folder-support.js";
 import { createScoreStore, type ScoreStore } from "./score-store.js";
@@ -87,6 +92,16 @@ export interface ApplicationOptions {
   resumeBuilder?: ResumeBuilder;
   /** The job folders. Default: one folder per job under `<directory>/jobs`. Tests may pass a fake. */
   folders?: JobFolderManager;
+  /**
+   * The environment variables Scout reads (only the `SCOUT_IMAP_*` mail settings come from here).
+   * Default: the real `process.env`. Tests pass a plain object so they never touch the real one.
+   */
+  environment?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Makes the mailbox connection from the credentials. Default: the real, read-only IMAP
+   * connection. Tests pass a function that returns a fake connection serving saved emails.
+   */
+  mailboxConnector?: (credentials: ImapCredentials) => ConnectToMailbox;
 }
 
 /** The joined-up Scout: every module, built once, plus the few helpers that need several of them. */
@@ -118,6 +133,10 @@ export interface Application {
    * brain is returned on later calls.
    */
   brain(): Brain;
+  /** The environment variables in use (see `ApplicationOptions.environment`). */
+  readonly environment: Readonly<Record<string, string | undefined>>;
+  /** Makes the read-only mailbox connection for these credentials (see `ApplicationOptions.mailboxConnector`). */
+  mailboxConnector(credentials: ImapCredentials): ConnectToMailbox;
   /** Throws `ScoutError("paused")` while the kill switch is on. Every acting step calls it first. */
   assertNotPaused(): void;
   /** One folder per job (`<directory>/jobs`): the description, resumes and a log, kept in step with the store. */
@@ -200,6 +219,8 @@ export function createApplication(options: ApplicationOptions = {}): Application
   const application: Application = {
     directory,
     now,
+    environment: options.environment ?? process.env,
+    mailboxConnector: options.mailboxConnector ?? createImapConnector,
     settingsStore,
     jobStore,
     actionLog,

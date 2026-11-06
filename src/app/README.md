@@ -59,6 +59,24 @@ Job folders (`<data folder>/jobs/`, the `folders` module) follow the store in on
 
 `backup`, `restore`, `leads` and `service` do not open the application (opening creates the database, which would make a restore into a fresh folder look non-empty).
 
+## Mail, notes and interview commands
+
+Registered by `registerMailAndNotesCommands` (one line in `src/index.ts`). Scout never sends mail, never deletes it and never marks it as read.
+
+| Command                                            | What it does                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scout notes write <repoFolder> [--force]`         | Reads the project once (`readRepository`), asks the brain for a note, writes `<data>/project-notes/<folder>.md`; prints the verdict, dropped terms and figures, and the do-not-claim list. Refuses to overwrite without `--force`; the refusal costs no model call                                                     |
+| `scout notes list`                                 | Lists the saved notes with verdict and stack                                                                                                                                                                                                                                                                           |
+| `scout notes draft`                                | Prints draft profile points from the notes, all on `hold`. Never saves into the profile                                                                                                                                                                                                                                |
+| `scout interview <jobId> [--save] [--no-model]`    | Prints the interview plan for a stored job. Resume points: the `.tex` saved in the job's folder, else a resume built from the profile for the job's skills. `--save` writes it into the job folder's "Interview prep" section if that folder exists, else to `<data>/interview/<jobId>.md` (and says so)               |
+| `scout inbox [--since YYYY-MM-DD] [--folder NAME]` | Reads the mailbox read-only, classifies and matches each message, applies legal status moves, prints what changed, what was an illegal move (reported, not forced) and what matched nothing. Job-alert emails are printed as leads with their official board when a watched board names the company; no job is created |
+| `scout followups`                                  | Lists applied jobs with no reply for `followUpAfterDays` and prints a draft for each. Never sends                                                                                                                                                                                                                      |
+| `scout funnel`                                     | Prints the funnel (discovered, shortlisted, applied, replied, interviewing, offered) by source and posting age                                                                                                                                                                                                         |
+
+**Mailbox credentials** come only from the environment: `SCOUT_IMAP_HOST`, `SCOUT_IMAP_USER` and `SCOUT_IMAP_PASSWORD`. Use an app-specific password. On macOS you can take it from the Keychain: `export SCOUT_IMAP_PASSWORD="$(security find-generic-password -s scout-imap -w)"`. Scout itself never stores it and never prints it. If any variable is missing, the command stops with a message that names the missing ones.
+
+**Tests** inject a fake mailbox through `ApplicationOptions.mailboxConnector` and a plain object through `ApplicationOptions.environment`; see `test/mail-notes.e2e.test.ts`.
+
 ## Data folder layout
 
 `SCOUT_DATA_DIR`, or `./data`. Git-ignored.

@@ -11,6 +11,7 @@ export {
 export { createBoardStore, type BoardEntry, type BoardStore } from "./boards-store.js";
 export { createScoreStore, type ScoreStore, type StoredScore } from "./score-store.js";
 export { registerCommands } from "./commands/index.js";
+export { registerMailAndNotesCommands } from "./commands/mail-register.js";
 export { createDigestProvider, createPendingProposals, describeResume } from "./digest-provider.js";
 export { runDiscoveryPass, type DiscoveryPassSummary, type FailedBoard } from "./discovery-pass.js";
 export { createWebDependencies } from "./web-dependencies.js";
