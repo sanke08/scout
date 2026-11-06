@@ -48,6 +48,13 @@ describe("follow-up timing", () => {
     }
   });
 
+  it("uses the exact apply time when given, so seeing the posting again does not restart the clock", () => {
+    const seenAgain = makeJobRecord({ updatedAt: "2026-11-09T00:00:00.000Z" });
+    const now = daysAfterApplying(9);
+    expect(isFollowUpDue(seenAgain, settings, now)).toBe(false);
+    expect(isFollowUpDue(seenAgain, settings, now, "2026-11-01T00:00:00.000Z")).toBe(true);
+  });
+
   it("counts whole days and never goes below zero", () => {
     expect(daysWithoutReply(appliedJob, daysAfterApplying(9.9))).toBe(9);
     expect(daysWithoutReply(appliedJob, daysAfterApplying(-2))).toBe(0);
@@ -72,7 +79,7 @@ describe("follow-up draft content", () => {
     const first = profile.experience[0];
     expect(draft?.emailBody).toContain(first?.org);
     expect(draft?.emailBody).toContain(first?.title);
-    expect(draft?.emailBody).toContain("booking flow");
+    expect(draft?.emailBody).toContain("where I built the booking flow");
   });
 
   it("has one project line with exactly one link, availability, resume line and sign-off", () => {

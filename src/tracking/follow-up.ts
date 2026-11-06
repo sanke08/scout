@@ -43,19 +43,31 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Whole days since the job became `applied`, or undefined when it is not `applied`.
- * A job's `updatedAt` is the moment of its last status change, which for an `applied` job is
- * the moment it was applied.
+ *
+ * `appliedAt` (an ISO time, for example from the action log) is the exact moment it was applied.
+ * Without it, the job's `updatedAt` is used. That is the moment of the last change to the job,
+ * which is the apply moment unless the posting was seen again since (the store also updates
+ * `updatedAt` then), so pass `appliedAt` when the log is at hand.
  */
-export function daysWithoutReply(job: JobRecord, now: Date): number | undefined {
+export function daysWithoutReply(
+  job: JobRecord,
+  now: Date,
+  appliedAt?: string,
+): number | undefined {
   if (job.status !== "applied") return undefined;
-  const since = Date.parse(job.updatedAt);
+  const since = Date.parse(appliedAt ?? job.updatedAt);
   if (Number.isNaN(since)) return undefined;
   return Math.max(0, Math.floor((now.getTime() - since) / DAY_MS));
 }
 
 /** True when the job is `applied` and has waited at least `settings.followUpAfterDays` days. */
-export function isFollowUpDue(job: JobRecord, settings: Settings, now: Date): boolean {
-  const days = daysWithoutReply(job, now);
+export function isFollowUpDue(
+  job: JobRecord,
+  settings: Settings,
+  now: Date,
+  appliedAt?: string,
+): boolean {
+  const days = daysWithoutReply(job, now, appliedAt);
   return days !== undefined && days >= settings.followUpAfterDays;
 }
 
@@ -88,7 +100,7 @@ function workSentence(entry: ExperienceEntry | undefined): string | undefined {
   if (entry === undefined) return undefined;
   const point = firstUsableExperiencePoint(entry);
   const base = `I work as a ${entry.title} at ${entry.org}`;
-  return point === undefined ? `${base}.` : `${base}, where ${asClause(point)}.`;
+  return point === undefined ? `${base}.` : `${base}, where I ${asClause(point)}.`;
 }
 
 /** The line about personal projects with one link, or undefined when the profile has no project. */
@@ -120,8 +132,9 @@ export function draftFollowUp(
   profile: Profile,
   settings: Settings,
   now: Date,
+  appliedAt?: string,
 ): FollowUpDraft | undefined {
-  const days = daysWithoutReply(job, now);
+  const days = daysWithoutReply(job, now, appliedAt);
   if (days === undefined || days < settings.followUpAfterDays) return undefined;
 
   const experience = profile.experience[0];
