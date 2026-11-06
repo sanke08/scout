@@ -1,0 +1,81 @@
+{
+  "fields": [
+    {
+      "key": "_systemfield_name",
+      "label": "Name",
+      "name": "_systemfield_name",
+      "type": "text",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"_systemfield_name\"]"
+    },
+    {
+      "key": "_systemfield_email",
+      "label": "Email",
+      "name": "_systemfield_email",
+      "type": "email",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"_systemfield_email\"]"
+    },
+    {
+      "key": "_systemfield_resume",
+      "label": "Resume",
+      "name": "_systemfield_resume",
+      "type": "file",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"_systemfield_resume\"]"
+    },
+    {
+      "key": "portfolio",
+      "label": "Website or portfolio",
+      "name": "portfolio",
+      "type": "url",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"portfolio\"]"
+    },
+    {
+      "key": "salary_expectations",
+      "label": "What are your salary expectations?",
+      "name": "salary_expectations",
+      "type": "text",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"salary_expectations\"]"
+    },
+    {
+      "key": "disagree_story",
+      "label": "Describe a time you disagreed with a senior engineer",
+      "name": "disagree_story",
+      "type": "textarea",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"disagree_story\"]"
+    },
+    {
+      "key": "pronouns",
+      "label": "What pronouns do you use?",
+      "name": "pronouns",
+      "type": "text",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"pronouns\"]"
+    },
+    {
+      "key": "privacy_consent",
+      "label": "I agree to the processing of my data under the privacy policy",
+      "name": "privacy_consent",
+      "type": "checkbox",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"privacy_consent\"]"
+    }
+  ],
+  "submit": {
+    "label": "Submit Application",
+    "selector": "#submit-button"
+  },
+  "hash": "fb9fe3e3ee8be22d"
+}

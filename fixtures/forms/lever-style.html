@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply: Software Engineer at ExampleCorp (fictional Lever-style form)</title>
+  </head>
+  <body>
+    <h1>Software Engineer</h1>
+    <form action="https://example.com/lever-apply" method="post">
+      <label for="resume-upload-input">Resume/CV *</label>
+      <input id="resume-upload-input" name="resume" type="file" required />
+
+      <label for="full-name">Full name *</label>
+      <input id="full-name" name="name" type="text" required />
+
+      <label for="contact-email">Email *</label>
+      <input id="contact-email" name="email" type="email" required />
+
+      <label for="contact-phone">Phone</label>
+      <input id="contact-phone" name="phone" type="text" />
+
+      <label for="current-location">Current location</label>
+      <input id="current-location" name="location" type="text" />
+
+      <label for="current-company">Current company</label>
+      <input id="current-company" name="org" type="text" />
+
+      <label for="url-linkedin">LinkedIn URL</label>
+      <input id="url-linkedin" name="urls[LinkedIn]" type="text" />
+
+      <label for="url-github">GitHub URL</label>
+      <input id="url-github" name="urls[GitHub]" type="text" />
+
+      <fieldset>
+        <legend>Are you open to relocating to Berlin? *</legend>
+        <label><input type="radio" name="cards[relocate]" value="yes" required /> Yes</label>
+        <label><input type="radio" name="cards[relocate]" value="no" /> No</label>
+      </fieldset>
+
+      <label for="notice">What is your notice period? *</label>
+      <input id="notice" name="cards[notice]" type="text" required />
+
+      <label for="veteran">Veteran status</label>
+      <select id="veteran" name="eeo[veteran]">
+        <option value="">Select ...</option>
+        <option>I am a veteran</option>
+        <option>I am not a veteran</option>
+        <option>Decline to self-identify</option>
+      </select>
+
+      <label for="comments">Additional information</label>
+      <textarea id="comments" name="comments"></textarea>
+
+      <button type="submit" id="btn-submit">Submit application</button>
+    </form>
+  </body>
+</html>

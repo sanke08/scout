@@ -1,0 +1,110 @@
+{
+  "fields": [
+    {
+      "key": "job_application[first_name]",
+      "label": "First Name",
+      "name": "job_application[first_name]",
+      "type": "text",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"job_application[first_name]\"]"
+    },
+    {
+      "key": "job_application[last_name]",
+      "label": "Last Name",
+      "name": "job_application[last_name]",
+      "type": "text",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"job_application[last_name]\"]"
+    },
+    {
+      "key": "job_application[email]",
+      "label": "Email",
+      "name": "job_application[email]",
+      "type": "email",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"job_application[email]\"]"
+    },
+    {
+      "key": "job_application[phone]",
+      "label": "Phone",
+      "name": "job_application[phone]",
+      "type": "tel",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"job_application[phone]\"]"
+    },
+    {
+      "key": "job_application[resume]",
+      "label": "Resume/CV",
+      "name": "job_application[resume]",
+      "type": "file",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"job_application[resume]\"]",
+      "accept": ".pdf,.doc,.docx"
+    },
+    {
+      "key": "job_application[cover_letter]",
+      "label": "Cover Letter",
+      "name": "job_application[cover_letter]",
+      "type": "file",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"job_application[cover_letter]\"]",
+      "accept": ".pdf"
+    },
+    {
+      "key": "job_application[urls][linkedin]",
+      "label": "LinkedIn Profile",
+      "name": "job_application[urls][linkedin]",
+      "type": "url",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"job_application[urls][linkedin]\"]"
+    },
+    {
+      "key": "job_application[answers][source]",
+      "label": "How did you hear about this job?",
+      "name": "job_application[answers][source]",
+      "type": "text",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"job_application[answers][source]\"]"
+    },
+    {
+      "key": "job_application[answers][eu_work]",
+      "label": "Are you authorised to work in the EU?",
+      "name": "job_application[answers][eu_work]",
+      "type": "select",
+      "required": true,
+      "options": ["Yes", "No"],
+      "selector": "[name=\"job_application[answers][eu_work]\"]"
+    },
+    {
+      "key": "job_application[answers][why]",
+      "label": "Why do you want to work at ExampleCorp?",
+      "name": "job_application[answers][why]",
+      "type": "textarea",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"job_application[answers][why]\"]"
+    },
+    {
+      "key": "job_application[demographic][gender]",
+      "label": "Gender",
+      "name": "job_application[demographic][gender]",
+      "type": "select",
+      "required": false,
+      "options": ["Female", "Male", "Non-binary", "I do not wish to answer"],
+      "selector": "[name=\"job_application[demographic][gender]\"]"
+    }
+  ],
+  "submit": {
+    "label": "Submit Application",
+    "selector": "#submit_app"
+  },
+  "hash": "f991194fe05e4428"
+}

@@ -1,0 +1,117 @@
+{
+  "fields": [
+    {
+      "key": "resume",
+      "label": "Resume/CV",
+      "name": "resume",
+      "type": "file",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"resume\"]"
+    },
+    {
+      "key": "name",
+      "label": "Full name",
+      "name": "name",
+      "type": "text",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"name\"]"
+    },
+    {
+      "key": "email",
+      "label": "Email",
+      "name": "email",
+      "type": "email",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"email\"]"
+    },
+    {
+      "key": "phone",
+      "label": "Phone",
+      "name": "phone",
+      "type": "text",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"phone\"]"
+    },
+    {
+      "key": "location",
+      "label": "Current location",
+      "name": "location",
+      "type": "text",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"location\"]"
+    },
+    {
+      "key": "org",
+      "label": "Current company",
+      "name": "org",
+      "type": "text",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"org\"]"
+    },
+    {
+      "key": "urls[LinkedIn]",
+      "label": "LinkedIn URL",
+      "name": "urls[LinkedIn]",
+      "type": "text",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"urls[LinkedIn]\"]"
+    },
+    {
+      "key": "urls[GitHub]",
+      "label": "GitHub URL",
+      "name": "urls[GitHub]",
+      "type": "text",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"urls[GitHub]\"]"
+    },
+    {
+      "key": "cards[relocate]",
+      "label": "Are you open to relocating to Berlin?",
+      "name": "cards[relocate]",
+      "type": "radio",
+      "required": true,
+      "options": ["Yes", "No"],
+      "selector": "[name=\"cards[relocate]\"]"
+    },
+    {
+      "key": "cards[notice]",
+      "label": "What is your notice period?",
+      "name": "cards[notice]",
+      "type": "text",
+      "required": true,
+      "options": [],
+      "selector": "[name=\"cards[notice]\"]"
+    },
+    {
+      "key": "eeo[veteran]",
+      "label": "Veteran status",
+      "name": "eeo[veteran]",
+      "type": "select",
+      "required": false,
+      "options": ["I am a veteran", "I am not a veteran", "Decline to self-identify"],
+      "selector": "[name=\"eeo[veteran]\"]"
+    },
+    {
+      "key": "comments",
+      "label": "Additional information",
+      "name": "comments",
+      "type": "textarea",
+      "required": false,
+      "options": [],
+      "selector": "[name=\"comments\"]"
+    }
+  ],
+  "submit": {
+    "label": "Submit application",
+    "selector": "#btn-submit"
+  },
+  "hash": "59ba14f894040da9"
+}
