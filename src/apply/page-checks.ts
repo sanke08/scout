@@ -94,3 +94,21 @@ const NEGATED_CONFIRMATION_PATTERN =
 export function looksLikeConfirmation(text: string): boolean {
   return CONFIRMATION_PATTERN.test(text) && !NEGATED_CONFIRMATION_PATTERN.test(text);
 }
+
+/** How many confirmation phrases the text holds. */
+function countConfirmationPhrases(text: string): number {
+  return text.match(new RegExp(CONFIRMATION_PATTERN.source, "gi"))?.length ?? 0;
+}
+
+/**
+ * True when `after` holds a confirmation that `before` did not already hold. Text that was on the
+ * page before the user submitted (a banner on a re-opened form) never counts.
+ * Example: before "Thank you for applying to Acme! Fill in the form" and after the same text plus
+ * "Email is required." is false; before the form and after "Thank you for applying!" is true.
+ */
+export function confirmationIsNew(before: string, after: string): boolean {
+  return (
+    looksLikeConfirmation(after) &&
+    countConfirmationPhrases(after) > countConfirmationPhrases(before)
+  );
+}

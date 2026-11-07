@@ -20,6 +20,7 @@ export {
 } from "./map-fields.js";
 export {
   detectPageBlocker,
+  confirmationIsNew,
   looksLikeConfirmation,
   type PageBlocker,
   type PageBlockerKind,

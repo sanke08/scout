@@ -17,7 +17,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   detectPageBlocker,
-  looksLikeConfirmation,
+  confirmationIsNew,
   mapFields,
   mayAutoSubmit,
   planApplication,
@@ -304,11 +304,10 @@ async function waitForConfirmation(
   // Text already on the form before the user submits (for example a banner saying "your
   // application has been received" on a re-opened form) must never count as a confirmation.
   const textBeforeSubmit = await readPageText();
-  const alreadyLooksConfirmed = looksLikeConfirmation(textBeforeSubmit);
   let waitedMilliseconds = 0;
   for (;;) {
     const text = await readPageText();
-    if (looksLikeConfirmation(text) && (!alreadyLooksConfirmed || text !== textBeforeSubmit)) {
+    if (confirmationIsNew(textBeforeSubmit, text)) {
       return text;
     }
     if (waitedMilliseconds >= timeoutSeconds * 1000) return undefined;
@@ -370,7 +369,6 @@ async function waitForUserSubmit(
   console.log(
     `The form is filled in the open browser window. Review it and press submit yourself; Scout waits up to ${context.waitSeconds} seconds for the confirmation page.`,
   );
-  const confirmation = await waitForConfirmation(driver, context.environment, context.waitSeconds);
   const { jobStore } = context.application;
   const id = context.job.id;
   if (jobStore.get(id)?.status === "resume-ready") {
@@ -383,8 +381,9 @@ async function waitForUserSubmit(
   jobStore.transition(
     id,
     "submitting",
-    "Submit marker: the form was filled and left open for you to submit; the outcome is checked next and never retried.",
+    "Submit marker: the form was filled and left open for you to submit; written before waiting so an unclear result is never retried.",
   );
+  const confirmation = await waitForConfirmation(driver, context.environment, context.waitSeconds);
   if (confirmation !== undefined) {
     jobStore.transition(
       id,
@@ -456,7 +455,11 @@ async function applyWithDriver(context: ApplyContext, driver: BrowserDriver): Pr
   const mayAsk = context.submitPossible && plan.blockers.length === 0;
   const confirmed = mayAsk && (await confirmSubmission(context, plan));
   // Whenever a submit would be possible, only a typed yes keeps level Automatic; otherwise fill.
-  const level = context.submitPossible && !confirmed ? "fill" : context.level;
+  // The job status can change while the page opens (for example approved in the digest), so a
+  // submit is never allowed without a typed yes, whatever submitPossible said earlier.
+  const level = confirmed ? context.level : "fill";
+  // The typed yes can take a long time; the kill switch is checked again right before the click.
+  if (confirmed) context.application.assertNotPaused();
   const result = await runApplication(runArguments(context, keepOpen(driver), plan, level));
   printResult(result, context);
 
