@@ -61,6 +61,7 @@ export const OUTSIDE_TEXT_NOTICE =
 
 /** Control and invisible characters (they can hide instructions), written as escapes. */
 const HIDDEN_CHARACTERS = new RegExp(
+  // eslint-disable-next-line no-control-regex
   "[\\u0000-\\u0008\\u000b-\\u001f\\u007f\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\ufeff]",
   "g",
 );
