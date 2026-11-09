@@ -91,3 +91,13 @@ Context: Earlier, Scout never typed a password. The owner wants a choice per pla
 Options: A manual only; B manual or saved credentials, per platform, opt-in; C always saved.
 Choice: B, default manual. Credentials live only in the OS keychain; Scout never receives the password while saving, never logs it and never sends it to a model. Auto sign-in happens once per run and at most once per six hours, only on the platform's own domain, and stops at any CAPTCHA, one-time code or checkpoint. Choosing saved credentials or Automatic for LinkedIn, Indeed or Naukri needs a typed confirmation because automating those sites may break their terms and risk the account.
 Consequences: This supersedes the "Scout never types a password" rule in the idea document for platforms set to saved. Submitting is unchanged: kill switch, typed yes, daily limit, never twice.
+
+## D-013 (2026-11-09): Autopilot: the model decides, Scout offers tools
+
+Status: accepted (supersedes D-006 and D-009 for autopilot; the single-shot Brain stays for notes and interview plans)
+Context: The owner wants Scout to be a start/pause surface only. Filtering, shortlisting, tailoring and what to do next must be decided dynamically by the model, not by predefined rules. Only Sonnet 5.5 is used.
+Options: A keep code rules with the model at the edges; B give the model tools and let it run the whole job; C both.
+Choice: B for the job hunt. `scout mcp` serves Scout's capabilities as tools; `scout agent run` starts `claude -p --model claude-sonnet-5-5` with only those tools (plus web search and fetch) and watches the run. The owner's wishes are free text (goals), not rules. Hard rules, keyword scoring and the score threshold are no longer used by autopilot. Codex and engine switching are removed.
+What code still enforces (data integrity and the owner's own controls, not filters): the pause switch on every tool call; the apply level per platform (Prepare only, Fill I submit, Automatic) with the owner's choice that on Automatic the model submits without a typed yes; the state machine and submitted-once; the fact check on resume wording; untrusted text kept apart from instructions; no secret ever reaches the model.
+Verified 2026-11-09: `claude -p --model claude-sonnet-5-5 --mcp-config F --strict-mcp-config --allowedTools "mcp__scout__*" --tools "" --max-turns 4 --output-format stream-json --verbose` called a stdio MCP tool and used its result without a permission prompt.
+Consequences: More autonomy means the live run log and the pause switch matter more. Every tool call is logged. Cost is the owner's Claude usage; a turn limit per run is a setting.
