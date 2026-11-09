@@ -121,6 +121,12 @@ export function registerApprovalCommands(program: Command, overrides: Applicatio
           console.log(describeMove(returnFromNeedsYou(application.jobStore, jobId)));
           return;
         }
+        if (job.status === "submitting") {
+          throw new ScoutError(
+            "illegal-transition",
+            `Job ${jobId} is "submitting": Scout was stopped (or its tool process was killed, which can happen about four seconds after a stop) after the submit marker was written and before the result was read, so nobody knows whether the application was sent. Undo cannot reopen it, because a retry could send it twice. Check the company's page and your email, then record the real result with \`scout applications status ${jobId} applied\` (or \`unverified\` when you cannot tell).`,
+          );
+        }
         const target = UNDO_TARGETS[job.status];
         if (target === undefined) {
           throw new ScoutError(

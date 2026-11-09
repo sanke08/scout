@@ -6,25 +6,33 @@
  * run has ended and its tool process has exited (which would close the window and leave nothing to
  * record the outcome, so a later hunt could submit the same job again). This helper is a separate,
  * detached process: it opens Scout's persistent browser profile, fills the form with the profile
- * and the saved answers, keeps the window open, writes the submit marker BEFORE waiting, waits for a
- * confirmation message that was not on the page before, saves the evidence and records `applied`
- * (a new confirmation was seen) or `unverified` (not proven). It never presses submit itself.
+ * and the saved answers and keeps the window open. While it waits the job is `needs-you` ("waiting
+ * for you to press submit") and the private hand-off record says so (that record, not any wording,
+ * is what lets the ledger accept the owner's own submit). The submit marker is written only when the
+ * page CHANGES after the baseline taken when the form was ready (the owner clicked something or the
+ * page moved on). A new confirmation message then records `applied`; a changed page without one
+ * records `unverified`. If nothing at all changed within the wait, nothing was sent: the job goes
+ * back to where it was, with a reason saying so, and it does not count toward the daily limit.
+ * The helper never presses submit itself.
  *
- * Safety: the pause switch is honoured before anything is filled; a lock file holding the helper's
- * process id keeps a second helper from taking the same job; the hand-off file must be inside the
- * data folder; the resume file and the page address are checked again like the tool checks them.
- * After a failure the job is left in `needs-you` with the reason, or `unverified` when the submit
- * marker was already written, never silently as it was.
+ * Safety: the pause switch is honoured before anything is filled and on every look while waiting
+ * (then it exits with nothing sent); a lock file holding the helper's process id keeps a second
+ * helper from taking the same job or the browser profile; the hand-off file must be inside the
+ * data folder and carry the token `apply_to_job` made; the resume file and the page address are
+ * checked again like the tool checks them. After a failure the job is left in `needs-you` with the
+ * reason, or `unverified` when the submit marker was already written, never silently as it was.
+ * A helper that is killed outright (SIGKILL) leaves a stale lock file; the next start treats it as
+ * stale because its process no longer exists.
  *
  * Example: `scout apply-keep-open 3f9a1c --answers-file <data>/apply-helpers/3f9a1c.json`.
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { z } from "zod";
-import { runApplication } from "../../apply/index.js";
+import { confirmationIsNew, runApplication } from "../../apply/index.js";
 import type { CredentialVault } from "../../platforms/index.js";
 import { ScoutError, type JobRecord } from "../../shared/index.js";
-import { WAITING_FOR_SUBMIT_MARKER, returnFromNeedsYou } from "../../ledger/index.js";
+import { WAITING_FOR_SUBMIT_REASON, returnFromNeedsYou } from "../../ledger/index.js";
 import type { Application } from "../application.js";
 import {
   buildRunContext,
@@ -41,12 +49,7 @@ import {
   type RunContext,
 } from "./apply-autopilot.js";
 import type { ApplyEnvironment } from "./apply-environment.js";
-import {
-  closeQuietly,
-  keepOpen,
-  saveOwnerSubmitEvidence,
-  waitForConfirmation,
-} from "./apply-core.js";
+import { closeQuietly, keepOpen, saveOwnerSubmitEvidence } from "./apply-core.js";
 
 /** How long the helper waits for the owner to press submit when `--wait` is not given (thirty minutes). */
 export const KEEP_OPEN_WAIT_SECONDS = 1800;
@@ -61,6 +64,7 @@ export interface KeepOpenOptions {
 
 /** What the tool leaves in the hand-off file. */
 const handOffSchema = z.object({
+  token: z.string().optional(),
   answers: z.record(z.string(), z.string()).default({}),
   resumePath: z.string().optional(),
   applyUrl: z.string().optional(),
@@ -116,7 +120,11 @@ function takeLock(application: Application, jobId: string): () => void {
   try {
     writeFileSync(
       path,
-      JSON.stringify({ pid: process.pid, startedAt: application.now().toISOString() }),
+      JSON.stringify({
+        pid: process.pid,
+        jobId,
+        startedAt: application.now().toISOString(),
+      }),
       {
         flag: "wx",
       },
@@ -127,12 +135,9 @@ function takeLock(application: Application, jobId: string): () => void {
   return () => rmSync(path, { force: true });
 }
 
-/** True for a `needs-you` job whose reason says its filled form waits for the owner. */
-function isWaiting(job: JobRecord): boolean {
-  return (
-    job.status === "needs-you" &&
-    (job.statusReason ?? "").toLowerCase().includes(WAITING_FOR_SUBMIT_MARKER)
-  );
+/** True for a `needs-you` job that is the one waiting in a hand-off made by `apply_to_job`. */
+function isWaiting(application: Application, job: JobRecord): boolean {
+  return job.status === "needs-you" && application.handoffs.isWaiting(job.id);
 }
 
 /** Writes one line of what the helper did to the action log (it has no screen). */
@@ -140,16 +145,27 @@ function log(application: Application, jobId: string, detail: string): void {
   application.actionLog.append({ actor: "autopilot", action: "apply-helper", jobId, detail });
 }
 
-/** Leaves the job where the failure belongs: unverified after a submit marker, else needs-you. */
+/**
+ * Leaves the job where the failure belongs: unverified after a submit marker; back where it was
+ * (with the reason) when it was only waiting for the owner; else needs-you.
+ */
 function recordFailure(application: Application, jobId: string, error: unknown): void {
   const detail = error instanceof Error ? error.message : String(error);
-  const status = application.jobStore.get(jobId)?.status;
+  const job = application.jobStore.get(jobId);
+  const status = job?.status;
+  const wasWaiting = job !== undefined && isWaiting(application, job);
   try {
     if (status === "submitting") {
       application.jobStore.transition(
         jobId,
         "unverified",
         `The helper stopped after the form was handed to you (${detail}), so it is not known whether the application was sent. Scout will not retry; check the company's page and your email.`,
+      );
+    } else if (wasWaiting) {
+      returnFromNeedsYou(
+        application.jobStore,
+        jobId,
+        `The helper stopped while waiting for you (${detail}) before any change to the page was seen, so nothing is known to have been sent. Run \`scout apply ${jobId}\` when ready.`,
       );
     } else if (status === "shortlisted" || status === "resume-ready" || status === "approved") {
       application.jobStore.transition(
@@ -164,10 +180,60 @@ function recordFailure(application: Application, jobId: string, error: unknown):
   log(application, jobId, `The helper stopped: ${detail}`);
 }
 
+/** How long the helper sleeps between two looks at the page, in milliseconds. */
+const LOOK_MILLISECONDS = 3000;
+
+/** The page text with white space tidied, so a harmless re-flow is not seen as a change. */
+function tidy(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/** The page's text, or an empty text when the page cannot be read (it may be between two loads). */
+async function readTextQuietly(driver: Parameters<typeof closeQuietly>[0]): Promise<string> {
+  try {
+    return await driver.readConfirmation();
+  } catch {
+    return "";
+  }
+}
+
+/** The page's address, or an empty text when it cannot be read. */
+async function readAddressQuietly(driver: Parameters<typeof closeQuietly>[0]): Promise<string> {
+  try {
+    return await driver.currentUrl();
+  } catch {
+    return "";
+  }
+}
+
+/** Writes the submit marker once the page has changed: back from `needs-you`, through `approved`. */
+function writeSubmitMarker(application: Application, jobId: string): void {
+  const { jobStore } = application;
+  returnFromNeedsYou(
+    jobStore,
+    jobId,
+    "The page changed after the form was handed to you, so you may have pressed submit.",
+  );
+  if (jobStore.get(jobId)?.status !== "approved") {
+    jobStore.transition(
+      jobId,
+      "approved",
+      "The page changed after the form was handed to you, so the job is recorded as approved to track the outcome.",
+    );
+  }
+  jobStore.transition(
+    jobId,
+    "submitting",
+    "Submit marker: the page changed after the form was handed to you (you may have pressed submit); written before looking for a confirmation so an unclear result is never retried.",
+  );
+}
+
 /**
- * After the form is filled and checked: writes the submit marker (before waiting, so an unclear
- * result is never retried), waits for a new confirmation, records `applied` or `unverified` and
- * saves the evidence.
+ * After the form is filled and checked: records that the helper is waiting (no submit marker yet),
+ * then looks at the page every few seconds. The first change from the baseline (different text or
+ * address) writes the submit marker; a confirmation that was not on the page before records
+ * `applied`; a changed page that never shows one records `unverified`. When nothing changed at all
+ * within the wait, or Scout was paused, nothing was sent: the job returns to where it was.
  */
 async function waitForOwnerSubmit(
   context: RunContext,
@@ -176,22 +242,72 @@ async function waitForOwnerSubmit(
   driver: Parameters<typeof saveOwnerSubmitEvidence>[0]["driver"],
   startedAt: string,
   waitSeconds: number,
+  token: string | undefined,
 ): Promise<void> {
   const { application, job } = context;
   const { jobStore } = application;
-  if (jobStore.get(job.id)?.status === "resume-ready") {
-    jobStore.transition(
-      job.id,
-      "approved",
-      "The form was filled and left open for you to submit, so the job is recorded as approved to track the outcome.",
-    );
+  const baselineText = await readTextQuietly(driver);
+  const baselineAddress = await readAddressQuietly(driver);
+  jobStore.transition(job.id, "needs-you", WAITING_FOR_SUBMIT_REASON);
+  application.handoffs.markWaiting(job.id, token);
+
+  let markerWritten = false;
+  let confirmation: string | undefined;
+  let waitedMilliseconds = 0;
+  let pausedReason: string | undefined;
+  for (;;) {
+    if (!markerWritten) {
+      try {
+        application.assertNotPaused();
+      } catch {
+        pausedReason = "Scout was paused";
+        break;
+      }
+    }
+    if (!markerWritten && jobStore.get(job.id)?.status !== "needs-you") {
+      // The owner recorded the result themselves (the ledger moved the job): nothing left to do.
+      log(
+        application,
+        job.id,
+        "The job was moved by someone else while waiting; the helper left it.",
+      );
+      return;
+    }
+    const text = await readTextQuietly(driver);
+    const address = await readAddressQuietly(driver);
+    const changed = tidy(text) !== tidy(baselineText) || address !== baselineAddress;
+    if (changed && !markerWritten) {
+      writeSubmitMarker(application, job.id);
+      markerWritten = true;
+      waitedMilliseconds = 0;
+    }
+    if (markerWritten && confirmationIsNew(baselineText, text)) {
+      confirmation = text;
+      break;
+    }
+    if (waitedMilliseconds >= waitSeconds * 1000) break;
+    await environment.pause(LOOK_MILLISECONDS);
+    waitedMilliseconds += LOOK_MILLISECONDS;
   }
-  jobStore.transition(
-    job.id,
-    "submitting",
-    "Submit marker: the form was filled and left open for you to submit; written before waiting so an unclear result is never retried.",
-  );
-  const confirmation = await waitForConfirmation(driver, environment, waitSeconds);
+
+  if (!markerWritten) {
+    const minutes = Math.max(1, Math.ceil(waitSeconds / 60));
+    returnFromNeedsYou(
+      jobStore,
+      job.id,
+      pausedReason === undefined
+        ? `You did not submit within ${minutes} minutes; nothing was sent. Run \`scout apply ${job.id}\` when ready.`
+        : `${pausedReason}, so the window was closed before you submitted; nothing was sent. Run \`scout apply ${job.id}\` when ready.`,
+    );
+    log(
+      application,
+      job.id,
+      pausedReason === undefined
+        ? "The page never changed within the wait: nothing was sent, the job was put back."
+        : "Scout was paused while waiting: nothing was sent, the job was put back.",
+    );
+    return;
+  }
   if (confirmation !== undefined) {
     jobStore.transition(
       job.id,
@@ -202,7 +318,7 @@ async function waitForOwnerSubmit(
     jobStore.transition(
       job.id,
       "unverified",
-      `No confirmation message was seen within ${waitSeconds} seconds, so it is not known whether the application was sent. Scout will not retry; check the company's page and your email.`,
+      `The page changed but no confirmation message was seen within ${waitSeconds} seconds, so it is not known whether the application was sent. Scout will not retry; check the company's page and your email.`,
     );
   }
   try {
@@ -227,7 +343,7 @@ async function waitForOwnerSubmit(
     application,
     job.id,
     confirmation === undefined
-      ? "No confirmation was seen: unverified."
+      ? "The page changed but no confirmation was seen: unverified."
       : "A confirmation was seen: applied.",
   );
 }
@@ -242,7 +358,13 @@ async function fillAndWait(
   const handOff = readHandOff(application, options.answersFile);
   const waitSeconds = parseWaitSeconds(options.wait);
   const job = requireJob(application, jobId);
-  if (isWaiting(job)) {
+  if (!application.handoffs.matches(jobId, handOff.token)) {
+    throw new ScoutError(
+      "unsafe",
+      `This hand-off file was not written by Scout's apply tool for job ${jobId} (its token does not match Scout's private record), so the helper did nothing.`,
+    );
+  }
+  if (job.status === "needs-you") {
     returnFromNeedsYou(application.jobStore, jobId, "The helper window is starting.");
   } else if (!STARTABLE_STATUSES.includes(job.status)) {
     throw new ScoutError(
@@ -287,6 +409,7 @@ async function fillAndWait(
         driver,
         startedAt,
         waitSeconds,
+        handOff.token,
       );
     } finally {
       await closeQuietly(driver);
@@ -314,6 +437,7 @@ export async function runKeepOpenCommand(
     await fillAndWait(application, { environment, vault }, jobId, options);
   } finally {
     release();
+    application.handoffs.end(jobId);
     const handOffPath = resolve(options.answersFile);
     if (handOffPath.startsWith(resolve(helperFolderOf(application)) + sep)) {
       rmSync(handOffPath, { force: true });

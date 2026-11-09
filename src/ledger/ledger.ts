@@ -26,6 +26,7 @@ import { writeTextAtomic } from "../folders/index.js";
 import { ScoutError } from "../shared/index.js";
 import type { JobRecord, JobStatus, JobStore, Posting } from "../shared/index.js";
 import { jobNumberFromLink } from "./job-number.js";
+import type { HandoffStore } from "./handoff-store.js";
 import type { LedgerStore } from "./ledger-store.js";
 import { returnFromNeedsYou } from "./waiting.js";
 import { renderLedgerMarkdown } from "./render-markdown.js";
@@ -33,7 +34,6 @@ import { reachableStatuses, statusPath } from "./status-path.js";
 import {
   APPLICATION_STATUSES,
   FINISHED_STATUSES,
-  WAITING_FOR_SUBMIT_MARKER,
   applicationDetailsSchema,
   manualApplicationSchema,
   newEventSchema,
@@ -83,6 +83,12 @@ export interface LedgerOptions {
   jobStore: JobStore;
   /** The ledger tables. */
   store: LedgerStore;
+  /**
+   * The private record of forms handed to the owner. A `needs-you` job counts as "waiting for the
+   * owner's own submit" only while this record says a helper has the filled form open. Left out,
+   * no job is ever treated as waiting.
+   */
+  handoffs?: HandoffStore;
   now: () => Date;
   /** Where `APPLICATIONS.md` is written. Left out, no file is written. */
   filePath?: string;
@@ -102,14 +108,6 @@ const PRE_SUBMIT_STATUSES: readonly JobStatus[] = [
   "skipped",
   "needs-you",
 ];
-
-/** True for a job in `needs-you` whose reason says the filled form is waiting for the owner's submit. */
-function isWaitingForSubmit(job: JobRecord): boolean {
-  return (
-    job.status === "needs-you" &&
-    (job.statusReason ?? "").toLowerCase().includes(WAITING_FOR_SUBMIT_MARKER)
-  );
-}
 
 /** An ISO time from a date (noon UTC) or a full time; an unreadable value is `invalid-input`. */
 function toIsoTime(value: string | undefined, now: Date): string {
@@ -138,6 +136,14 @@ export function createLedger(options: LedgerOptions): Ledger {
   const { jobStore, store, now } = options;
   /** Set while the ledger itself moves a job, so the history line carries the right time. */
   let timeOverride: string | undefined;
+
+  /**
+   * True for a job in `needs-you` whose filled form a helper has open for the owner. The proof is
+   * the private hand-off record, never the words of the job's reason, which a model can write.
+   */
+  function isWaitingForSubmit(job: JobRecord): boolean {
+    return job.status === "needs-you" && options.handoffs?.isWaiting(job.id) === true;
+  }
 
   /** Builds the list view of one job. */
   function entryOf(
@@ -480,6 +486,8 @@ export function createLedger(options: LedgerOptions): Ledger {
     writeFile,
 
     noteTransition(jobId, from, to, reason) {
+      // Any move of a job that was waiting ends the hand-off, so it can never be reused later.
+      if (options.handoffs?.isWaiting(jobId) === true) options.handoffs.end(jobId);
       if (to === "submitting") return;
       const at = timeOverride ?? now().toISOString();
       if (to === "applied") {

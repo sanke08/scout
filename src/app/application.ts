@@ -27,9 +27,11 @@ import {
 } from "../folders/index.js";
 import {
   LEDGER_FILE_NAME,
+  createHandoffStore,
   createLedger,
   createLedgerStore,
   withLedger,
+  type HandoffStore,
   type Ledger,
 } from "../ledger/index.js";
 import type { PlatformOverrides } from "../platforms/index.js";
@@ -147,6 +149,11 @@ export interface Application {
   /** The application ledger: every application, its recruiter, history and next step. */
   readonly ledger: Ledger;
   /**
+   * The private record of forms handed to the owner at Fill, I submit. Only `apply_to_job` and the
+   * helper process write to it; it is what lets the ledger record the owner's own submit.
+   */
+  readonly handoffs: HandoffStore;
+  /**
    * The hard-rule decider, built fresh from the stored applications so the cooldown list is
    * current. Example: after a job becomes `applied`, the next call knows its company is cooling down.
    */
@@ -228,6 +235,7 @@ export function createApplication(options: ApplicationOptions = {}): Application
   const actionLog = options.actionLog ?? createActionLog(database!, now);
   const folders =
     options.folders ?? createJobFolderManager({ jobsDirectory: join(directory, "jobs"), now });
+  const handoffs = createHandoffStore(join(directory, "apply-helpers", "handoffs.json"), now);
   let ledgerInstance: Ledger | undefined;
   let ledgerDatabase: DatabaseSync | undefined;
   const folderSyncedJobs = withFolderSync(storedJobs, { folders, actionLog });
@@ -245,6 +253,7 @@ export function createApplication(options: ApplicationOptions = {}): Application
       ledgerInstance = createLedger({
         jobStore,
         store: createLedgerStore(ledgerTables),
+        handoffs,
         now,
         filePath: join(directory, LEDGER_FILE_NAME),
         onFileError: (message) =>
@@ -280,6 +289,7 @@ export function createApplication(options: ApplicationOptions = {}): Application
     discovery,
     boardStore: createBoardStore(join(directory, "boards.json")),
     scoreStore: createScoreStore(join(directory, "scores.json")),
+    handoffs,
     get ledger() {
       return getLedger();
     },

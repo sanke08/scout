@@ -61,6 +61,13 @@ describe("build_resume", () => {
     expect(data["pageFit"]).toMatchObject({ pages: 1, compiledToOnePage: true });
   });
 
+  it("names the paths made from the posting's words as outside text", async () => {
+    const made = world();
+    const data = dataOf(await made.call("build_resume", { jobId: "job-1", keywords: [] }));
+    expect(data["outsideFields"]).toEqual(expect.arrayContaining(["path", "texPath", "pdfPath"]));
+    expect(typeof data["notice"]).toBe("string");
+  });
+
   it("never adds a keyword the profile does not hold, and says which were refused", async () => {
     const made = world();
     const data = dataOf(

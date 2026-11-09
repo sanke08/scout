@@ -55,7 +55,8 @@ export interface ScoutMcpService {
   /**
    * Stops accepting calls and waits (at most `drainMilliseconds`) for the calls that are running,
    * so a submit that already wrote its marker still records its outcome. Resolves `true` when
-   * nothing is running any more, `false` when the wait ran out.
+   * nothing is running any more, `false` when the wait ran out. Idempotent: every call returns the
+   * SAME promise, so a second stop signal can never start a second, shorter wait.
    */
   shutdown(): Promise<boolean>;
 }
@@ -115,20 +116,26 @@ export function createScoutMcpService(
       },
     );
   }
+  /** The one drain every `shutdown` call shares. */
+  let drain: Promise<boolean> | undefined;
+  async function drainRunningCalls(): Promise<boolean> {
+    if (running.size === 0) return true;
+    let timer: NodeJS.Timeout | undefined;
+    const timedOut = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), options.drainMilliseconds ?? DRAIN_MILLISECONDS);
+    });
+    const finished = Promise.allSettled([...running]).then(() => true as const);
+    const drained = await Promise.race([finished, timedOut]);
+    clearTimeout(timer);
+    return drained;
+  }
   return {
     server,
     isStopping: () => stopping,
-    async shutdown() {
+    shutdown() {
       stopping = true;
-      if (running.size === 0) return true;
-      let timer: NodeJS.Timeout | undefined;
-      const timedOut = new Promise<false>((resolve) => {
-        timer = setTimeout(() => resolve(false), options.drainMilliseconds ?? DRAIN_MILLISECONDS);
-      });
-      const finished = Promise.allSettled([...running]).then(() => true as const);
-      const drained = await Promise.race([finished, timedOut]);
-      clearTimeout(timer);
-      return drained;
+      drain ??= drainRunningCalls();
+      return drain;
     },
   };
 }
@@ -145,6 +152,42 @@ export function createScoutMcpServer(
 export interface ServeOptions extends ScoutMcpServiceOptions {
   /** Ends the process when a running call did not finish in time. Default: `process.exit`. */
   exit?: (code: number) => void;
+  /** Where messages for the owner go. Default: standard error (standard output is the protocol). */
+  write?: (text: string) => void;
+}
+
+/**
+ * Builds the function that handles every stop request (input closed, SIGTERM, SIGINT). The first
+ * one starts the graceful shutdown. A second one only says that Scout is already draining, and
+ * any later one is ignored: a repeated signal never shortens or restarts the wait, so a submit
+ * that is past its marker can finish and record its outcome. Only SIGKILL, which no program can
+ * catch, ends the drain at once.
+ * Example: three calls start one shutdown and write one "already stopping" line.
+ */
+export function createStopHandler(
+  service: ScoutMcpService,
+  options: ServeOptions,
+  closeServer: () => Promise<void>,
+): (source: string) => void {
+  const write = options.write ?? ((text: string) => process.stderr.write(text));
+  let requests = 0;
+  return (source) => {
+    requests += 1;
+    if (requests === 2) {
+      write(
+        `Scout got a second stop request (${source}) and is already finishing the call that is running. Only a hard kill (SIGKILL) ends it sooner, and that can leave a job in submitting.\n`,
+      );
+    }
+    if (requests > 1) return;
+    void service.shutdown().then(async (drained) => {
+      if (!drained) {
+        write("Scout stopped while a call was still running.\n");
+        (options.exit ?? process.exit)(1);
+        return;
+      }
+      await closeServer();
+    });
+  };
 }
 
 /**
@@ -153,9 +196,16 @@ export interface ServeOptions extends ScoutMcpServiceOptions {
  *
  * Stopping (the input closes, or SIGTERM/SIGINT arrives because the run was stopped): no new call
  * is accepted, calls that are running are waited for (a minute at most) and only then is the
- * server closed, so the caller closes the database after the last handler, never under one. When a
- * call outlives the wait the process ends without closing the database (SQLite recovers), and
- * the job stays `submitting`, which Scout never retries.
+ * server closed, so the caller closes the database after the last handler, never under one. The
+ * signals are handled with `on`, not `once`, and repeated ones are absorbed (see
+ * `createStopHandler`), so a second SIGTERM can never kill the process in the middle of the drain.
+ *
+ * The limit: the `claude` command's own MCP client may send SIGKILL about four seconds after it
+ * asks a server to stop, and a process cannot catch SIGKILL. A submit that is still past its
+ * marker then ends without recording its outcome: the job stays `submitting`, which Scout never
+ * retries, and the owner records the real result with `scout applications status <id> applied`
+ * (or `unverified`) after checking the company's page and email. When a call outlives the wait
+ * (a minute) the process ends without closing the database (SQLite recovers) with the same result.
  */
 export async function serveScoutMcp(
   application: Application,
@@ -165,22 +215,10 @@ export async function serveScoutMcp(
   await service.server.connect(new StdioServerTransport());
   await new Promise<void>((resolve) => {
     service.server.server.onclose = resolve;
-    let stopRequested = false;
-    const stop = (): void => {
-      if (stopRequested) return;
-      stopRequested = true;
-      void service.shutdown().then(async (drained) => {
-        if (!drained) {
-          process.stderr.write("Scout stopped while a call was still running.\n");
-          (options.exit ?? process.exit)(1);
-          return;
-        }
-        await service.server.close();
-      });
-    };
+    const stop = createStopHandler(service, options, () => service.server.close());
     // The transport does not notice a closed input pipe, so end the server ourselves.
-    process.stdin.on("end", stop);
-    process.once("SIGTERM", stop);
-    process.once("SIGINT", stop);
+    process.stdin.on("end", () => stop("input closed"));
+    process.on("SIGTERM", () => stop("SIGTERM"));
+    process.on("SIGINT", () => stop("SIGINT"));
   });
 }

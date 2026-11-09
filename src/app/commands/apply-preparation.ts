@@ -35,27 +35,13 @@ function dayKey(date: Date): string {
 }
 
 /**
- * Counts the jobs that moved to `applied` or `unverified` today (both mean a submit may have been
- * sent), from the action log (the store writes `submitting -> applied: reason` for every move).
- * Example: two entries `submitting -> applied: ...` stamped today and one stamped yesterday give 2.
- */
-export function countAppliedToday(actionLog: ActionLog, now: Date): number {
-  const today = dayKey(now);
-  return actionLog
-    .recent(ACTION_LOG_SCAN_LIMIT)
-    .filter(
-      (entry) =>
-        entry.action === "transition" &&
-        /^[a-z-]+ -> (applied|unverified): /.test(entry.detail) &&
-        dayKey(new Date(entry.at)) === today,
-    ).length;
-}
-
-/**
- * Counts the jobs that were moved to `submitting` today, from the action log. Every submit attempt
- * writes exactly one such line before the click, so this counts attempts whose outcome is not yet
- * known as well as finished ones. It is what the atomic daily-limit claim uses.
- * Example: three jobs moved to `submitting` today and one yesterday give 3.
+ * Counts today's submit attempts: the jobs that moved to `submitting`, `applied` or `unverified`
+ * today, each job once, from the action log (the store writes `a -> b: reason` for every move).
+ * It is the ONE daily-limit count: the atomic claim (`application.claimSubmitSlot`), `scout apply`
+ * and the autopilot tool all use it, so a job whose outcome is not yet known (`submitting`) counts
+ * exactly as a finished one does.
+ * Example: three jobs moved to `submitting` today (one of them then to `applied`) and one job
+ * moved yesterday give 3.
  */
 export function countSubmitsToday(actionLog: ActionLog, now: Date): number {
   const today = dayKey(now);
@@ -63,7 +49,7 @@ export function countSubmitsToday(actionLog: ActionLog, now: Date): number {
   for (const entry of actionLog.recent(ACTION_LOG_SCAN_LIMIT)) {
     if (
       entry.action === "transition" &&
-      /^[a-z-]+ -> submitting: /.test(entry.detail) &&
+      /^[a-z-]+ -> (submitting|applied|unverified): /.test(entry.detail) &&
       dayKey(new Date(entry.at)) === today
     ) {
       jobs.add(entry.jobId ?? entry.detail);

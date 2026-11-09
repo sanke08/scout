@@ -209,6 +209,19 @@ const recordDecision: ScoutTool<typeof RECORD_DECISION_INPUT> = {
   },
 };
 
+/**
+ * The words Scout writes itself when a filled form waits for the owner. A question that contains
+ * them is rewritten, so a model can never make a flagged job look like a handed-over form. (The
+ * ledger does not depend on the words, see `HandoffStore`; this keeps the owner's list honest.)
+ */
+const HANDED_OVER_WORDING =
+  /(form\s+handed\s+to\s+you[\s,]*)?waiting\s+for\s+you\s+to\s+press\s+submit/gi;
+
+/** The question with Scout's own hand-over wording replaced, so it cannot imitate a hand-over. */
+function neutraliseHandOverWording(question: string): string {
+  return question.replace(HANDED_OVER_WORDING, "[Scout's hand-over wording removed]");
+}
+
 /** The input of `flag_for_user`. */
 const FLAG_INPUT = z.object({
   jobId: JOB_ID_SCHEMA,
@@ -232,7 +245,7 @@ const flagForUser: ScoutTool<typeof FLAG_INPUT> = {
       const updated = context.application.jobStore.transition(
         input.jobId,
         "needs-you",
-        input.question,
+        neutraliseHandOverWording(input.question),
       );
       context.note(`flag_for_user ${input.jobId}`);
       return okOutside({ ...compactJob(updated) }, OUTSIDE_COMPACT_FIELDS);

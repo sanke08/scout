@@ -1,5 +1,5 @@
 /** Tests that settings files written before autopilot still load, and the new limits are checked. */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -41,5 +41,18 @@ describe("settings", () => {
       false,
     );
     expect(settingsSchema.safeParse(DEFAULT_SETTINGS).success).toBe(true);
+  });
+});
+
+describe("the approved reference page", () => {
+  it("offers no Codex engine, because autopilot uses Claude only (old settings files still load)", () => {
+    const page = readFileSync(
+      join(import.meta.dirname, "..", "web", "reference", "scout-page.html"),
+      "utf8",
+    );
+    expect(page).not.toMatch(/codex/i);
+    expect(settingsSchema.parse({ ...DEFAULT_SETTINGS, mainEngine: "codex" }).mainEngine).toBe(
+      "codex",
+    );
   });
 });

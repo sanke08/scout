@@ -193,3 +193,48 @@ describe("mapFields output", () => {
     );
   });
 });
+
+describe("mapFields never-guess choice fields", () => {
+  /** A form with one select, one radio group and one tick-box group about the owner. */
+  const form = `<form>
+    <label for="a">Please choose</label>
+    <select id="a" name="candidate[gender]"><option>Male</option><option>Female</option><option>Prefer not to say</option></select>
+    <fieldset><legend>Select one</legend>
+      <input type="radio" id="b1" name="age_band" value="u30"><label for="b1">Under 30</label>
+      <input type="radio" id="b2" name="age_band" value="o30"><label for="b2">30 and over</label>
+    </fieldset>
+    <label for="c">Notice</label>
+    <select id="c" name="notice"><option>Immediate</option><option>30 days</option></select>
+  </form>`;
+
+  it("marks them for the owner (needs-you), so the model can never answer them", () => {
+    const profile = sampleProfile();
+    const mappings = mapFields(
+      snapshotForm(form),
+      profile,
+      [],
+      settingsWith({ demographicAnswers: "ask-each-time" }),
+    );
+    expect(mappings.length).toBeGreaterThanOrEqual(3);
+    for (const mapping of mappings) {
+      expect(mapping.status, mapping.field.label).toBe("needs-you");
+      expect(["demographic", "personal"]).toContain(mapping.kind);
+    }
+  });
+
+  it("still uses an approved answer from the bank for the owner", () => {
+    const profile = sampleProfile();
+    const bank: AnswerEntry[] = [
+      {
+        question: "Notice",
+        answer: "30 days",
+        approvedOn: "2026-01-01",
+        kind: "personal",
+      } as AnswerEntry,
+    ];
+    const mappings = mapFields(snapshotForm(form), profile, bank, settingsWith());
+    const notice = mappings.find((mapping) => mapping.field.name === "notice");
+    expect(notice?.status).toBe("ready");
+    expect(notice?.source).toBe("answer-bank");
+  });
+});

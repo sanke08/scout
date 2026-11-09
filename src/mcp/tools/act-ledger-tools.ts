@@ -92,12 +92,12 @@ export const updateStatusInput = z.object({
   status: statusSchema,
   note: z.string().trim().max(300).optional(),
   at: z.string().max(40).optional(),
-  /** Words quoted from the message or page that justify the status; required for rejected and withdrawn. */
+  /** Words quoted from the message or page that justify the status; required for rejected, withdrawn and closed. */
   evidence: z.string().trim().max(500).optional(),
 });
 
-/** Statuses nobody can leave again. The model may set them only with quoted evidence. */
-const EVIDENCE_STATUSES: readonly string[] = ["rejected", "withdrawn"];
+/** Statuses nobody can leave again (closed is final too). The model may set them only with quoted evidence. */
+const EVIDENCE_STATUSES: readonly string[] = ["rejected", "withdrawn", "closed"];
 
 /** The fewest characters of evidence accepted: a real quote, not a word. */
 const MINIMUM_EVIDENCE_LENGTH = 15;
@@ -137,8 +137,8 @@ export const ledgerTools: ScoutTool[] = [
   {
     name: "update_application_status",
     description:
-      "Moves an application to a status you learned about (contacted, interviewing, offer, rejected, withdrawn, closed...). It goes only through legal steps of the job state machine: reporting offer from applied records the steps in between; a move no chain of legal steps reaches is refused with the list of what is possible. A sent application can never be skipped or reopened. A job reaches applied only by a submit Scout confirmed, by the owner recording an application made outside Scout, or when the owner pressed submit on a form Scout filled and handed over (a job in needs-you whose reason says it is waiting for the owner to press submit). " +
-      "rejected and withdrawn can never be undone, so they need evidence: a short quote (at least 15 characters) of what the message or page actually said, copied word for word; it is stored in the history. Never infer a rejection from tone. Input: jobId, status, note (a short reason), at (when it happened, YYYY-MM-DD or a time; default now), evidence (required for rejected and withdrawn). Returns the application and the statuses allowed next.",
+      "Moves an application to a status you learned about (contacted, interviewing, offer, rejected, withdrawn, closed...). It goes only through legal steps of the job state machine: reporting offer from applied records the steps in between; a move no chain of legal steps reaches is refused with the list of what is possible. A sent application can never be skipped or reopened. A job reaches applied only by a submit Scout confirmed, by the owner recording an application made outside Scout, or when the owner pressed submit on a form Scout filled and handed over (a job in needs-you that a Scout helper really has open for the owner: Scout's own private record says so, not the job's wording). " +
+      "rejected, withdrawn and closed can never be undone, so they need evidence: a short quote (at least 15 characters) of what the message or page actually said, copied word for word; it is stored in the history. Never infer a rejection from tone. Input: jobId, status, note (a short reason), at (when it happened, YYYY-MM-DD or a time; default now), evidence (required for rejected, withdrawn and closed). Returns the application and the statuses allowed next.",
     inputSchema: updateStatusInput,
     readOnly: false,
     handler: (input, context) =>

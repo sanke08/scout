@@ -48,12 +48,31 @@ function isOwnerOnly(mapping: FieldMapping): boolean {
   );
 }
 
-/** The first `neverUsed` term found in `text` as whole words, or `undefined`. */
+/** The fewest letters a `neverUsed` term needs to be matched inside longer words. */
+const SUBSTRING_MATCH_LETTERS = 4;
+
+/** Letters and digits only, lower case: "Full-Stack", "full stack" and "FULLSTACK" all become "fullstack". */
+function squashed(text: string): string {
+  return normaliseText(text).replace(/ /g, "");
+}
+
+/**
+ * The first `neverUsed` term found in `text`, or `undefined`. The match ignores case, punctuation
+ * and hyphens ("synergy" finds "Synergy!", "full-stack" finds "full stack"). A term of four or more
+ * letters is found anywhere inside the text, even inside a longer word ("leverage" finds
+ * "leveraged"); a shorter term ("Go", "AI") must stand as a whole word so it does not block every
+ * word that contains it.
+ */
 function forbiddenTermIn(text: string, neverUsed: readonly string[]): string | undefined {
-  const plain = ` ${normaliseText(text)} `;
+  const spaced = ` ${normaliseText(text)} `;
+  const joined = squashed(text);
   return neverUsed.find((term) => {
     const wanted = normaliseText(term);
-    return wanted !== "" && plain.includes(` ${wanted} `);
+    if (wanted === "") return false;
+    const compact = squashed(term);
+    const letters = compact.replace(/[^\p{L}]/gu, "");
+    if (letters.length >= SUBSTRING_MATCH_LETTERS) return joined.includes(compact);
+    return spaced.includes(` ${wanted} `);
   });
 }
 

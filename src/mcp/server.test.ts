@@ -11,7 +11,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { makeTestApplication, type TestApplication } from "../app/test-helpers.js";
-import { createScoutMcpServer, createScoutMcpService } from "./server.js";
+import { createScoutMcpServer, createScoutMcpService, createStopHandler } from "./server.js";
 import { fail, ok, type ScoutTool } from "./tool.js";
 import { ALL_TOOLS } from "./tools/index.js";
 
@@ -210,6 +210,70 @@ describe("graceful stop", () => {
     await stuck.started;
     expect(await stuck.service.shutdown()).toBe(false);
     stuck.release();
+  });
+});
+
+describe("repeated stop requests", () => {
+  it("share one drain: every shutdown call returns the same promise", async () => {
+    const test = makeTestApplication([], {});
+    cleanups.push(async () => test.cleanUp());
+    const service = createScoutMcpService(test.application, [], { drainMilliseconds: 40 });
+    const first = service.shutdown();
+    expect(service.shutdown()).toBe(first);
+    expect(await first).toBe(true);
+  });
+
+  it("starts one shutdown, says once that it is already stopping, and ignores any later request", async () => {
+    let shutdowns = 0;
+    let finish: (drained: boolean) => void = () => {};
+    const service = {
+      shutdown: () => {
+        shutdowns += 1;
+        return new Promise<boolean>((resolve) => {
+          finish = resolve;
+        });
+      },
+    } as unknown as ReturnType<typeof createScoutMcpService>;
+    const written: string[] = [];
+    const exits: number[] = [];
+    let closed = 0;
+    const stop = createStopHandler(
+      service,
+      { write: (text) => written.push(text), exit: (code) => exits.push(code) },
+      async () => {
+        closed += 1;
+      },
+    );
+    stop("SIGTERM");
+    stop("SIGTERM");
+    stop("SIGINT");
+    stop("input closed");
+    expect(shutdowns).toBe(1);
+    expect(written).toHaveLength(1);
+    expect(written[0]).toMatch(/already finishing the call that is running/);
+    expect(written[0]).toMatch(/SIGKILL/);
+    // Nothing ended the process while the drain was still going.
+    expect(exits).toEqual([]);
+    expect(closed).toBe(0);
+    finish(true);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(closed).toBe(1);
+    expect(exits).toEqual([]);
+  });
+
+  it("exits with a failure only when the drain ran out", async () => {
+    const service = { shutdown: async () => false } as unknown as ReturnType<
+      typeof createScoutMcpService
+    >;
+    const exits: number[] = [];
+    const stop = createStopHandler(
+      service,
+      { write: () => {}, exit: (code) => exits.push(code) },
+      async () => {},
+    );
+    stop("SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(exits).toEqual([1]);
   });
 });
 

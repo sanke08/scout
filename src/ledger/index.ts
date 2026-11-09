@@ -7,6 +7,8 @@
  */
 export { createLedger } from "./ledger.js";
 export type { Ledger, LedgerOptions } from "./ledger.js";
+export { createHandoffStore } from "./handoff-store.js";
+export type { HandoffState, HandoffStore } from "./handoff-store.js";
 export { createLedgerStore } from "./ledger-store.js";
 export type { LedgerStore } from "./ledger-store.js";
 export { jobNumberFromLink } from "./job-number.js";
@@ -18,7 +20,6 @@ export {
   APPLICATION_STATUSES,
   EVENT_KINDS,
   FINISHED_STATUSES,
-  WAITING_FOR_SUBMIT_MARKER,
   WAITING_FOR_SUBMIT_REASON,
   applicationDetailsSchema,
   dateOnlySchema,

@@ -115,7 +115,7 @@ describe("applyModelAnswers", () => {
     expect(result.used).toEqual({ size: "Large" });
   });
 
-  it("refuses an answer that uses a never-used term as whole words, in any case", () => {
+  it("refuses an answer that uses a never-used term, in any case and inside a longer word", () => {
     const rules = { neverUsed: ["Side Project"] };
     const refused = applyModelAnswers(
       [mapping("about", "draft-needed", "motivational")],
@@ -129,6 +129,49 @@ describe("applyModelAnswers", () => {
       { about: "Through my side projects" },
       rules,
     );
-    expect(allowed.used).toEqual({ about: "Through my side projects" });
+    // A term of four or more letters is found inside longer words too ("projects" contains it).
+    expect(allowed.used).toEqual({});
+    const clean = applyModelAnswers(
+      [mapping("about", "draft-needed", "motivational")],
+      { about: "Through my hobbies" },
+      rules,
+    );
+    expect(clean.used).toEqual({ about: "Through my hobbies" });
+  });
+});
+
+describe("neverUsed matching", () => {
+  /** True when the answer was refused because of the never-used list. */
+  function refusedFor(term: string, answer: string): boolean {
+    const result = applyModelAnswers(
+      [mapping("note", "unknown", "factual")],
+      { note: answer },
+      { neverUsed: [term] },
+    );
+    return result.refused.length === 1 && /never to be used/.test(result.refused[0]!.reason);
+  }
+
+  it.each([
+    ["synergy", "We create great Synergy!"],
+    ["Synergy", "synergy"],
+    ["full-stack", "I am a full stack developer"],
+    ["full stack", "A Full-Stack role"],
+    ["fullstack", "full-stack work"],
+    ["leverage", "I leveraged caching"],
+    ["rockstar", "a ROCK-STAR engineer"],
+    ["results-driven", "Results driven, and proud"],
+    ["Node.js", "I use nodejs daily"],
+  ])("refuses %j in %j (case, punctuation and hyphens do not matter)", (term, answer) => {
+    expect(refusedFor(term, answer)).toBe(true);
+  });
+
+  it("matches a short term only as a whole word, so it does not block every word containing it", () => {
+    expect(refusedFor("Go", "I write Go and Python")).toBe(true);
+    expect(refusedFor("Go", "I am going to relocate, good morning")).toBe(false);
+    expect(refusedFor("AI", "I paid attention")).toBe(false);
+  });
+
+  it("lets an answer through that does not contain the term", () => {
+    expect(refusedFor("synergy", "A friend told me about the role")).toBe(false);
   });
 });

@@ -171,7 +171,7 @@ function loadRunnableJob(jobs: JobStore, jobId: string): JobRecord {
   if (job.status === "submitting") {
     throw new ScoutError(
       "unsafe",
-      `Job ${jobId} is already being submitted, or a submit was interrupted. Scout never retries a submit blindly; check the company's page and your email, then mark the job yourself.`,
+      `Job ${jobId} is already being submitted, or a submit was interrupted. Scout never retries a submit blindly; check the company's page and your email, then record the result with \`scout applications status ${jobId} applied\` (or \`unverified\`).`,
     );
   }
   if (!RUNNABLE_STATUSES.includes(job.status)) {

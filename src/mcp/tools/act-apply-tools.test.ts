@@ -13,10 +13,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createApplication } from "../../app/index.js";
+import { countSubmitsToday } from "../../app/commands/apply-preparation.js";
 import { createScoutMcpService } from "../server.js";
 import { formHtml, profileForGreenhouse, sampleProfile } from "../../apply/test-helpers.js";
 import { createFakeSite, FAKE_PASSWORD } from "../../platforms/test-helpers.js";
 import {
+  NOW,
   dataOf,
   errorOf,
   makeActWorld,
@@ -133,6 +135,32 @@ describe("get_form", () => {
     expect(made.status()).toBe("shortlisted");
   });
 
+  it("fetches and opens the STORED address, never the model's string, when only a query or fragment differs", async () => {
+    const made = world({
+      posting: {
+        sources: [
+          { name: "greenhouse:examplecorp", url: "https://example.com/jobs/1" },
+          { name: "company-site", url: "https://example.com/jobs/1/apply" },
+        ],
+      },
+    });
+    const payloads = [
+      "https://example.com/jobs/1?utm_content=SECRET-ANSWER&gclid=abc#x",
+      "https://example.com/jobs/1/apply?gclid=abc&utm_term=OWNER-DATA#frag",
+    ];
+    for (const applyUrl of payloads) {
+      dataOf(await made.call("get_form", { jobId: "job-1", applyUrl }));
+    }
+    expect(made.pageDownloads).toEqual([
+      "https://example.com/jobs/1",
+      "https://example.com/jobs/1/apply",
+    ]);
+    // Prepare at the shared level downloads the same stored address.
+    dataOf(await made.call("apply_to_job", { jobId: "job-1", applyUrl: payloads[1] }));
+    expect(made.pageDownloads.at(-1)).toBe("https://example.com/jobs/1/apply");
+    expect(made.pageDownloads.join(" ")).not.toMatch(/SECRET|OWNER-DATA|gclid|#/);
+  });
+
   it("returns the form's own words cleaned and named as outside text", async () => {
     const made = world({ posting: { company: "Example\u0007Corp" } });
     const data = dataOf(await made.call("get_form", { jobId: "job-1" }));
@@ -247,6 +275,44 @@ describe("apply_to_job at Prepare only", () => {
   });
 });
 
+describe("apply_to_job never lets the model answer personal, demographic or financial questions", () => {
+  /** The form with required questions the owner alone may answer, whatever their control. */
+  const form = `<form>
+    <label for="e">Email *</label><input id="e" name="email" type="email" required>
+    <label for="age">Age *</label><input id="age" name="age" type="text" required>
+    <label for="dob">Geburtsdatum *</label><input id="dob" name="dob" type="text" required>
+    <label for="ctc">Expected CTC (LPA) *</label><input id="ctc" name="ctc" type="text" required>
+    <label for="cat">Select one *</label>
+    <select id="cat" name="candidate[caste_category]" required><option>General</option><option>OBC</option></select>
+    <label for="gen">Please choose *</label>
+    <select id="gen" name="gender_choice" required><option>Male</option><option>Female</option></select>
+    <button id="submit_app" type="submit">Submit Application</button>
+  </form>`;
+
+  it("refuses the model's answers and sends the job to the owner", async () => {
+    const made = world({ html: form });
+    const data = dataOf(
+      await made.call("apply_to_job", {
+        jobId: "job-1",
+        answers: {
+          age: "29",
+          dob: "1996-04-01",
+          ctc: "18",
+          "candidate[caste_category]": "General",
+          gender_choice: "Male",
+        },
+      }),
+    );
+    expect(data["outcome"]).toBe("needs-you");
+    expect(made.status()).toBe("needs-you");
+    const refused = (data["refusedAnswers"] as { fieldKey: string }[]).map((item) => item.fieldKey);
+    expect(refused.sort()).toEqual(
+      ["age", "candidate[caste_category]", "ctc", "dob", "gender_choice"].sort(),
+    );
+    expect(made.driver.calls.some((call) => call.startsWith("fill "))).toBe(false);
+  });
+});
+
 describe("apply_to_job at Fill, I submit", () => {
   const FILL = { boardLevels: { greenhouse: "fill" as const } };
 
@@ -274,24 +340,28 @@ describe("apply_to_job at Fill, I submit", () => {
     );
   });
 
-  it("the helper fills, writes the submit marker before waiting, and records applied for a new confirmation", async () => {
-    const statusesWhenWaiting: (string | undefined)[] = [];
+  it("the helper fills, waits as needs-you, writes the submit marker only when the page changes, and records applied for a new confirmation", async () => {
+    const seen: { status: string | undefined; pageText: string }[] = [];
     const made = world({
       settings: FILL,
       ownerSubmits: true,
       wrapDriver: (driver, application) => ({
         ...driver,
         readConfirmation: async () => {
-          statusesWhenWaiting.push(application.jobStore.get("job-1")?.status);
-          return driver.readConfirmation();
+          const pageText = await driver.readConfirmation();
+          seen.push({ status: application.jobStore.get("job-1")?.status, pageText });
+          return pageText;
         },
       }),
     });
     await made.call("apply_to_job", { jobId: "job-1" });
     await made.runHelper();
     expect(made.status()).toBe("applied");
-    expect(statusesWhenWaiting.length).toBeGreaterThan(0);
-    expect(new Set(statusesWhenWaiting)).toEqual(new Set(["submitting"]));
+    // While the page was unchanged (nothing clicked) there was never a submit marker.
+    const unchanged = seen.filter((look) => look.pageText === "");
+    expect(unchanged.length).toBeGreaterThan(0);
+    expect(unchanged.some((look) => look.status === "needs-you")).toBe(true);
+    expect(unchanged.every((look) => look.status !== "submitting")).toBe(true);
     expect(touching(made).some((call) => call.startsWith("fill "))).toBe(true);
     // Only the owner's own click submitted; Scout never did.
     expect(made.driver.calls.filter((call) => call.startsWith("submit "))).toHaveLength(1);
@@ -310,12 +380,30 @@ describe("apply_to_job at Fill, I submit", () => {
     expect(made.application.ledger.get("job-1")?.appliedAt).not.toBe("");
   });
 
-  it("records unverified when the owner never submits, and the job can never be applied for again", async () => {
-    const made = world({ settings: FILL });
+  it("returns the job to where it was, with a clear reason, when nothing changed: nothing was sent and the limit is untouched", async () => {
+    const made = world({ settings: { ...FILL, dailyApplicationLimit: 1 } });
     await made.call("apply_to_job", { jobId: "job-1" });
     await made.runHelper({ wait: "6" });
-    expect(made.status()).toBe("unverified");
+    expect(made.status()).toBe("resume-ready");
+    expect(made.application.jobStore.get("job-1")?.statusReason).toMatch(
+      /did not submit within 1 minutes; nothing was sent\. Run `scout apply job-1` when ready/,
+    );
     expect(made.driver.calls.some((call) => call.startsWith("submit "))).toBe(false);
+    expect(countSubmitsToday(made.application.actionLog, NOW)).toBe(0);
+    // The owner can take the job up again; the model is not locked out by a false "unverified".
+    expect(made.application.handoffs.isWaiting("job-1")).toBe(false);
+    expect(existsSync(lockFile(made))).toBe(false);
+  });
+
+  it("records unverified, never a retry, when the page changed but showed no confirmation", async () => {
+    const made = world({ settings: FILL });
+    await made.call("apply_to_job", { jobId: "job-1" });
+    // The first look is the baseline; later the owner has clicked something that is no confirmation.
+    let looks = 0;
+    made.driver.readConfirmation = async () =>
+      looks++ === 0 ? "" : "Please fix the errors below.";
+    await made.runHelper({ wait: "6" });
+    expect(made.status()).toBe("unverified");
     expect(errorOf(await made.call("apply_to_job", { jobId: "job-1" }))).toMatch(
       /unverified|cannot be applied/,
     );
@@ -329,7 +417,40 @@ describe("apply_to_job at Fill, I submit", () => {
     });
     await made.call("apply_to_job", { jobId: "job-1" });
     await made.runHelper({ wait: "3" });
-    expect(made.status()).toBe("unverified");
+    // The page never changed, so nothing was sent and no submit marker was written.
+    expect(made.status()).toBe("resume-ready");
+    expect(made.application.jobStore.get("job-1")?.statusReason).toMatch(/nothing was sent/);
+  });
+
+  it("exits cleanly, sending nothing, when Scout is paused while the helper waits", async () => {
+    const made = world({ settings: FILL });
+    await made.call("apply_to_job", { jobId: "job-1" });
+    const looks: string[] = [];
+    made.driver.readConfirmation = async () => {
+      looks.push("look");
+      if (looks.length === 2) made.pause();
+      return "";
+    };
+    await made.runHelper({ wait: "600" });
+    expect(made.status()).toBe("resume-ready");
+    expect(made.application.jobStore.get("job-1")?.statusReason).toMatch(
+      /paused.*nothing was sent/s,
+    );
+    expect(made.driver.calls.some((call) => call.startsWith("submit "))).toBe(false);
+    expect(made.driver.calls.at(-1)).toBe("close");
+    expect(existsSync(lockFile(made))).toBe(false);
+  });
+
+  it("refuses a hand-off file whose token Scout's private record does not know", async () => {
+    const made = world({ settings: FILL });
+    await made.call("apply_to_job", { jobId: "job-1" });
+    const file = made.helperStarts[0]!.args[3]!;
+    const forged = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    forged["token"] = "forged";
+    writeFileSync(file, JSON.stringify(forged));
+    await expect(made.runHelper()).rejects.toThrow(/not written by Scout's apply tool/);
+    expect(made.browserOpens).toHaveLength(0);
+    expect(made.application.handoffs.isWaiting("job-1")).toBe(false);
   });
 
   it("honours the pause switch before filling anything", async () => {
@@ -360,6 +481,51 @@ describe("apply_to_job at Fill, I submit", () => {
     expect(errorOf(await made.call("apply_to_job", { jobId: "job-1" }))).toMatch(/already open/);
     expect(made.helperStarts).toHaveLength(0);
     expect(made.status()).toBe("shortlisted");
+  });
+
+  it("refuses a second Fill while another job's window is open, and while one is still opening", async () => {
+    const made = world({ settings: FILL });
+    const resume = addSecondJob(made);
+    // Job 1 is handed over: its helper has been started but has not taken its lock yet.
+    dataOf(await made.call("apply_to_job", { jobId: "job-1" }));
+    const second = errorOf(await made.call("apply_to_job", { jobId: "job-2", resumePath: resume }));
+    expect(second).toMatch(/Fill window is already open for job job-1/);
+    expect(second).toMatch(/Prepare/);
+    expect(made.helperStarts).toHaveLength(1);
+    expect(made.application.jobStore.get("job-2")?.status).toBe("shortlisted");
+
+    // Now a live helper holds its lock (this test process stands in for it).
+    const other = world({ settings: FILL });
+    const otherResume = addSecondJob(other);
+    mkdirSync(join(other.directory, "apply-helpers"), { recursive: true });
+    writeFileSync(
+      join(other.directory, "apply-helpers", "job-2.lock"),
+      JSON.stringify({ pid: process.pid, jobId: "job-2" }),
+    );
+    expect(errorOf(await other.call("apply_to_job", { jobId: "job-1" }))).toMatch(
+      /already open for job job-2/,
+    );
+    expect(other.helperStarts).toHaveLength(0);
+    expect(other.status()).toBe("shortlisted");
+    // Prepare-only work on another job is still allowed: it opens no browser.
+    other.application.settingsStore.save({
+      ...other.application.settingsStore.load(),
+      boardLevels: { greenhouse: "prepare" },
+    });
+    expect(
+      dataOf(await other.call("apply_to_job", { jobId: "job-1", resumePath: otherResume }))[
+        "outcome"
+      ],
+    ).toBe("staged");
+  });
+
+  it("lets a new Fill start once the earlier helper has ended", async () => {
+    const made = world({ settings: FILL });
+    const resume = addSecondJob(made);
+    await made.call("apply_to_job", { jobId: "job-1" });
+    await made.runHelper({ wait: "0" });
+    const next = dataOf(await made.call("apply_to_job", { jobId: "job-2", resumePath: resume }));
+    expect(next["outcome"]).toBe("waiting-for-you");
   });
 
   it("falls back to Prepare only, and says so, when no helper can be started", async () => {
@@ -641,7 +807,7 @@ describe("apply_to_job at a sign-in wall", () => {
     const data = dataOf(await made.call("apply_to_job", { jobId: "job-1" }));
     await made.runHelper({ wait: "0" });
     expect(site.signInSubmits()).toBe(1);
-    expect(made.status()).toBe("unverified");
+    expect(made.status()).toBe("resume-ready");
     expect(JSON.stringify(data)).not.toContain(FAKE_PASSWORD);
     expect(readFileSync(join(made.evidenceDirectory, "answers.json"), "utf8")).not.toContain(
       FAKE_PASSWORD,
@@ -721,6 +887,30 @@ describe("the daily limit with parallel applications", () => {
     // The shared fake page already showed its confirmation after the first submit, so the second
     // is correctly "unverified"; what matters here is that both ran, one after the other.
     expect(["applied", "unverified"]).toContain(made.application.jobStore.get("job-2")?.status);
+  });
+
+  it("counts an attempt whose outcome is unknown (submitting) like a finished one, in every path", async () => {
+    const made = world({ settings: { ...AUTO, dailyApplicationLimit: 1 } });
+    addSecondJob(made);
+    // Job 2 went to submitting earlier today and was never resolved (a stopped run).
+    for (const step of ["resume-ready", "approved", "submitting"] as const) {
+      made.application.jobStore.transition("job-2", step, "test");
+    }
+    // 1. the shared count
+    expect(countSubmitsToday(made.application.actionLog, NOW)).toBe(1);
+    // 2. the autopilot tool refuses before opening anything
+    expect(errorOf(await made.call("apply_to_job", { jobId: "job-1" }))).toMatch(
+      /limit of 1 applications/,
+    );
+    expect(made.browserOpens).toHaveLength(0);
+    expect(made.status()).toBe("shortlisted");
+    // 3. the atomic claim refuses the same way
+    made.application.jobStore.transition("job-1", "resume-ready", "test");
+    made.application.jobStore.transition("job-1", "approved", "test");
+    expect(() => made.application.claimSubmitSlot("job-1", "claim", 1)).toThrow(
+      /limit of 1 applications/,
+    );
+    expect(made.status()).toBe("approved");
   });
 
   it("claims the limit and the submit marker in one step, even from two processes", () => {
@@ -837,6 +1027,53 @@ describe("stopping while an application is running", () => {
     expect(made.driver.calls.some((call) => call.startsWith("submit "))).toBe(false);
     expect(made.status()).not.toBe("submitting");
     expect(made.status()).not.toBe("applied");
+    await client.close();
+  });
+
+  it("finishes the post-marker window: shutdown during a slow confirmation read still records the outcome", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reading: () => void = () => {};
+    const readingStarted = new Promise<void>((resolve) => {
+      reading = resolve;
+    });
+    let reads = 0;
+    const made = world({
+      settings: AUTO,
+      wrapDriver: (driver) => ({
+        ...driver,
+        readConfirmation: async () => {
+          reads += 1;
+          // The first read is the page before the click; the second is the slow one after it.
+          if (reads < 2) return driver.readConfirmation();
+          reading();
+          await gate;
+          return driver.readConfirmation();
+        },
+      }),
+    });
+    const service = createScoutMcpService(made.application, made.tools);
+    const client = await connect(made, service);
+    const call = client.callTool({ name: "apply_to_job", arguments: { jobId: "job-1" } });
+    await readingStarted;
+    expect(made.status()).toBe("submitting");
+
+    const statusWhenDrained: (string | undefined)[] = [];
+    const drain = service.shutdown();
+    expect(service.shutdown()).toBe(drain);
+    const stopping = drain.then((drained) => {
+      statusWhenDrained.push(made.status());
+      return drained;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(statusWhenDrained).toEqual([]);
+    release();
+    expect(await stopping).toBe(true);
+    // The database is closed only after this point; by now the outcome is already written.
+    expect(statusWhenDrained).toEqual(["applied"]);
+    await call;
     await client.close();
   });
 

@@ -15,8 +15,11 @@ import { join } from "node:path";
 import { z } from "zod";
 import { resolveApplyEnvironment } from "../../app/commands/apply-environment.js";
 import { ScoutError, USABLE_POINT_STATUSES, type Point, type Profile } from "../../shared/index.js";
-import { ok, type ScoutTool } from "../tool.js";
+import { okOutside, outside, type ScoutTool } from "../tool.js";
 import { JOB_ID_LIMIT, safely, type ActToolOptions } from "./act-support.js";
+
+/** The longest file path returned to the model; a real path is far shorter. */
+const MAXIMUM_PATH_CHARACTERS = 1000;
 
 /** The most keywords one resume is built for. */
 const KEYWORD_LIMIT = 40;
@@ -189,33 +192,38 @@ export function createResumeTools(options: ActToolOptions): ScoutTool[] {
           context.note(
             `build_resume ${job.id}: ${build.matchedKeywords.length} keywords used, ${build.notInProfile.length} refused`,
           );
-          return ok({
-            jobId: job.id,
-            path: pdfPath ?? texPath,
-            texPath,
-            pdfPath,
-            ...(pdfNote === undefined ? {} : { pdfNote }),
-            pageFit: {
-              estimatedLines: build.estimatedLines,
-              lineLimit: build.lineLimit,
-              estimateSaysOnePage: build.estimatedLines <= build.lineLimit,
-              ...(pageCount === undefined
+          // The folder name is made from the posting's company and title (outside words), so each
+          // path is cleaned and the fields are named in outsideFields.
+          return okOutside(
+            {
+              jobId: job.id,
+              path: outside(pdfPath ?? texPath, MAXIMUM_PATH_CHARACTERS),
+              texPath: outside(texPath, MAXIMUM_PATH_CHARACTERS),
+              pdfPath: pdfPath === null ? null : outside(pdfPath, MAXIMUM_PATH_CHARACTERS),
+              ...(pdfNote === undefined ? {} : { pdfNote }),
+              pageFit: {
+                estimatedLines: build.estimatedLines,
+                lineLimit: build.lineLimit,
+                estimateSaysOnePage: build.estimatedLines <= build.lineLimit,
+                ...(pageCount === undefined
+                  ? {}
+                  : { pages: pageCount, compiledToOnePage: pageCount === 1 }),
+              },
+              pointsUsed: pointsOnPage(profile, build.texSource),
+              keywordsUsed: build.matchedKeywords,
+              keywordsRefused: build.notInProfile,
+              ...(build.notInProfile.length === 0
                 ? {}
-                : { pages: pageCount, compiledToOnePage: pageCount === 1 }),
+                : {
+                    keywordsRefusedReason:
+                      "The profile does not support these keywords, so they were not added. Do not claim them anywhere else either.",
+                  }),
+              projectsShown: build.projectsShown,
+              projectsLeftOut: build.projectsLeftOut,
+              status: application.jobStore.get(job.id)?.status ?? job.status,
             },
-            pointsUsed: pointsOnPage(profile, build.texSource),
-            keywordsUsed: build.matchedKeywords,
-            keywordsRefused: build.notInProfile,
-            ...(build.notInProfile.length === 0
-              ? {}
-              : {
-                  keywordsRefusedReason:
-                    "The profile does not support these keywords, so they were not added. Do not claim them anywhere else either.",
-                }),
-            projectsShown: build.projectsShown,
-            projectsLeftOut: build.projectsLeftOut,
-            status: application.jobStore.get(job.id)?.status ?? job.status,
-          });
+            ["path", "texPath", "pdfPath"],
+          );
         } finally {
           await rm(scratch, { recursive: true, force: true });
         }

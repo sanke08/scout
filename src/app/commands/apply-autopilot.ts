@@ -24,7 +24,7 @@
  * Example: `await applyForAutopilot(application, services, { jobId, answers: { notice: "30 days" } })`
  * returns `{ outcome: "applied", status: "applied", message: "...", ... }`.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import * as cheerio from "cheerio";
 import { canonicalizeUrl } from "../../discovery/index.js";
@@ -64,7 +64,7 @@ import {
   trySavedSignIn,
 } from "./apply-core.js";
 import {
-  countAppliedToday,
+  countSubmitsToday,
   effectiveLevel,
   evidenceDirectoryFor,
   findSavedResume,
@@ -175,21 +175,21 @@ export function applicationAddress(job: JobRecord, applyUrl: string | undefined)
   const own = checked(job.canonicalUrl);
   if (applyUrl === undefined) return job.canonicalUrl;
   const wanted = checked(applyUrl);
-  const known = new Set([own]);
+  // The model's own string is never returned: two addresses can have the same canonical form while
+  // one carries extra query text or a fragment (`?utm_content=<data>#x`), so the STORED address
+  // that matched is the one fetched or opened.
+  if (own === wanted) return job.canonicalUrl;
   for (const source of job.sources) {
     try {
-      known.add(canonicalizeUrl(source.url));
+      if (checked(source.url) === wanted) return source.url;
     } catch {
       // A stored source that is not a web address can never match an applyUrl.
     }
   }
-  if (!known.has(wanted)) {
-    throw new ScoutError(
-      "invalid-input",
-      `applyUrl must be one of this posting's own addresses (${job.canonicalUrl}), but it is not. Leave applyUrl out to use the posting's own address; never send the owner's data to another page.`,
-    );
-  }
-  return applyUrl;
+  throw new ScoutError(
+    "invalid-input",
+    `applyUrl must be one of this posting's own addresses (${job.canonicalUrl}), but it is not. Leave applyUrl out to use the posting's own address; never send the owner's data to another page.`,
+  );
 }
 
 /** The visible text of an HTML page, tidied and cut. */
@@ -271,7 +271,7 @@ function requireApplicable(job: JobRecord): void {
   if (job.status === "submitting") {
     throw new ScoutError(
       "unsafe",
-      `Job ${job.id} is already being submitted, or a submit was interrupted. Scout never retries a submit blindly; ask the owner to check the company's page and email.`,
+      `Job ${job.id} is already being submitted, or a submit was interrupted. Scout never retries a submit blindly; ask the owner to check the company's page and email and record the result with \`scout applications status ${job.id} applied\` (or \`unverified\`).`,
     );
   }
   if (!APPLICABLE_STATUSES.includes(job.status)) {
@@ -499,7 +499,7 @@ export function runArguments(
     settings: settingsForLevel(context.settings, level),
     jobs: application.jobStore,
     jobId: context.job.id,
-    appliedToday: () => countAppliedToday(application.actionLog, application.now()),
+    appliedToday: () => countSubmitsToday(application.actionLog, application.now()),
     boardHasCleanRun: context.boardHasCleanRun,
     now: () => application.now(),
     profileVersion: context.profile.version,
@@ -653,6 +653,8 @@ export function helperFileStem(jobId: string): string {
 
 /** What the tool leaves for the helper: the model's answers and the choices it made. */
 export interface HelperHandOff {
+  /** The secret from the private hand-off record; the helper refuses a file without the right one. */
+  token: string;
   answers: Record<string, string>;
   resumePath?: string;
   applyUrl?: string;
@@ -683,7 +685,11 @@ export function helperIsRunning(
   application: Pick<Application, "directory">,
   jobId: string,
 ): boolean {
-  const lockPath = lockPathOf(application, jobId);
+  return lockHolderRunning(lockPathOf(application, jobId));
+}
+
+/** True when the lock file at `lockPath` names a process that is still running. */
+function lockHolderRunning(lockPath: string): boolean {
   if (!existsSync(lockPath)) return false;
   try {
     const held = JSON.parse(readFileSync(lockPath, "utf8")) as { pid?: unknown };
@@ -691,6 +697,33 @@ export function helperIsRunning(
   } catch {
     return false;
   }
+}
+
+/** How long a hand-off that has no lock yet still counts as "a window is opening" (two minutes). */
+const HELPER_STARTUP_MILLISECONDS = 120_000;
+
+/**
+ * The job whose Fill window is open or opening right now, or `undefined`. There is ONE browser
+ * profile, and a second window on it would fail after the model was told the form is waiting, so
+ * a second Fill is refused while any live helper lock exists, and while a hand-off was made so
+ * recently that its helper has not taken its lock yet.
+ */
+export function openFillWindowJob(
+  application: Pick<Application, "directory" | "handoffs">,
+): string | undefined {
+  const folder = helperFolderOf(application);
+  if (existsSync(folder)) {
+    for (const name of readdirSync(folder)) {
+      if (!name.endsWith(".lock") || !lockHolderRunning(join(folder, name))) continue;
+      try {
+        const held = JSON.parse(readFileSync(join(folder, name), "utf8")) as { jobId?: unknown };
+        return typeof held.jobId === "string" ? held.jobId : name.slice(0, -".lock".length);
+      } catch {
+        return name.slice(0, -".lock".length);
+      }
+    }
+  }
+  return application.handoffs.startingJobs(HELPER_STARTUP_MILLISECONDS)[0];
 }
 
 /**
@@ -701,10 +734,11 @@ export function helperIsRunning(
  */
 async function handOffToHelper(context: RunContext): Promise<AutopilotApplyResult> {
   const { application, services } = context;
-  if (helperIsRunning(application, context.job.id)) {
+  const openJob = openFillWindowJob(application);
+  if (openJob !== undefined) {
     throw new ScoutError(
       "unsafe",
-      `A browser window for job ${context.job.id} is already open, waiting for the owner to press submit. Scout will not open a second one.`,
+      `A Fill window is already open for job ${openJob} (Scout has one browser profile, so a second window cannot open). Finish that one first, or use Prepare only for this job. Nothing was changed.`,
     );
   }
   let blockedAlready: AutopilotApplyResult | undefined;
@@ -731,6 +765,7 @@ async function handOffToHelper(context: RunContext): Promise<AutopilotApplyResul
   if (blockedAlready !== undefined) return blockedAlready;
 
   const handOff: HelperHandOff = {
+    token: application.handoffs.begin(context.job.id),
     answers: context.answers,
     ...(context.resumeFile === undefined ? {} : { resumePath: context.resumeFile }),
     ...(context.url === context.job.canonicalUrl ? {} : { applyUrl: context.url }),
@@ -750,6 +785,7 @@ async function handOffToHelper(context: RunContext): Promise<AutopilotApplyResul
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     rmSync(handOffPath, { force: true });
+    application.handoffs.end(context.job.id);
     returnFromNeedsYou(
       application.jobStore,
       context.job.id,
@@ -857,7 +893,7 @@ export async function applyForAutopilot(
   if (
     level === "auto" &&
     !dryRun &&
-    countAppliedToday(application.actionLog, application.now()) >= settings.dailyApplicationLimit
+    countSubmitsToday(application.actionLog, application.now()) >= settings.dailyApplicationLimit
   ) {
     throw new ScoutError(
       "limit-reached",

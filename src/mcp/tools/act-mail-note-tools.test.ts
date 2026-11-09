@@ -58,6 +58,17 @@ describe("read_inbox", () => {
     expect(log.operations.every((line) => /^(list|fetch|close)/.test(line))).toBe(true);
   });
 
+  it("names message ids as outside text, because they come from the mailbox", async () => {
+    const { connection } = makeFakeConnection(["interview-invite"]);
+    const made = world({
+      jobStatus: "applied",
+      environment: MAIL_ENVIRONMENT,
+      mailConnection: connection,
+    });
+    const data = dataOf(await made.call("read_inbox", {}));
+    expect(data["outsideFields"]).toEqual(expect.arrayContaining(["messages[].messageId"]));
+  });
+
   it("names the missing mail variables and never reads a mailbox", async () => {
     const { connection, log } = makeFakeConnection(["interview-invite"]);
     const made = world({
@@ -91,6 +102,13 @@ describe("write_note", () => {
     const folder = made.application.folders.findJobFolder(made.application.jobStore.get("job-1")!)!;
     return readFileSync(join(made.directory, "jobs", folder, "job.md"), "utf8");
   }
+
+  it("names the folder, which is made from the posting's words, as outside text", async () => {
+    const made = world();
+    const data = dataOf(await made.call("write_note", { jobId: "job-1", markdown: "A thought." }));
+    expect(data["outsideFields"]).toEqual(["folder"]);
+    expect(typeof data["notice"]).toBe("string");
+  });
 
   it("adds notes without overwriting earlier ones or the job description", async () => {
     const made = world();

@@ -16,6 +16,8 @@ export interface AgentProcessRequest {
   input: string;
   /** Called once per line of standard output, as it arrives. */
   onLine(line: string): void;
+  /** Tests shorten how long `exited` waits for the process group to end. Default: 65 seconds. */
+  groupWaitMilliseconds?: number;
 }
 
 /** How the command ended. `exitCode` is -1 when it never started. */
@@ -29,7 +31,13 @@ export interface AgentProcessExit {
 export interface AgentProcess {
   /** Stops the command now. Safe to call twice. */
   kill(): void;
-  /** Resolves when the command has ended and every output line was delivered. Never rejects. */
+  /**
+   * Resolves when the command has ended, every output line was delivered AND no program of its
+   * process group is left (Scout's tool server may still be finishing a submit after `claude` has
+   * gone). Waits at most `groupWaitMilliseconds`. The run lock is released only after this, so a
+   * new run can never start while the old tool server still holds the database and the browser
+   * profile. Never rejects.
+   */
   exited: Promise<AgentProcessExit>;
 }
 
@@ -38,6 +46,32 @@ export type AgentSpawner = (request: AgentProcessRequest) => AgentProcess;
 
 /** How many characters of the error stream are kept. */
 const MAXIMUM_ERROR_CHARACTERS = 2000;
+
+/** How long `exited` waits for the process group: the tool server's drain (a minute) plus a margin. */
+const GROUP_WAIT_MILLISECONDS = 65_000;
+
+/** How often the process group is looked at while waiting for it to end. */
+const GROUP_POLL_MILLISECONDS = 100;
+
+/** True while any process of the group led by `leader` is still running. */
+function groupIsRunning(leader: number): boolean {
+  try {
+    process.kill(-leader, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** Waits until the group is gone or `limit` milliseconds have passed. */
+async function waitForGroupToEnd(leader: number | undefined, limit: number): Promise<void> {
+  if (leader === undefined) return;
+  let waited = 0;
+  while (groupIsRunning(leader) && waited < limit) {
+    await new Promise((resolve) => setTimeout(resolve, GROUP_POLL_MILLISECONDS));
+    waited += GROUP_POLL_MILLISECONDS;
+  }
+}
 
 /** How long the command may take to obey a polite stop before it is killed hard. */
 const KILL_ESCALATION_MILLISECONDS = 3000;
@@ -86,10 +120,15 @@ export const spawnAgentProcess: AgentSpawner = (request) => {
     });
     child.on("close", (exitCode) => {
       lines.close();
-      resolve({
-        exitCode: exitCode ?? -1,
-        errorText: startFailure ?? errorText.slice(0, MAXIMUM_ERROR_CHARACTERS),
-      });
+      void waitForGroupToEnd(
+        child.pid,
+        request.groupWaitMilliseconds ?? GROUP_WAIT_MILLISECONDS,
+      ).then(() =>
+        resolve({
+          exitCode: exitCode ?? -1,
+          errorText: startFailure ?? errorText.slice(0, MAXIMUM_ERROR_CHARACTERS),
+        }),
+      );
     });
   });
 

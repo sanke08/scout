@@ -56,7 +56,7 @@ const result = await runApplication({
   settings,
   jobs,
   jobId,
-  appliedToday: () => countAppliedToday(),
+  appliedToday: () => countSubmitsToday(),
   boardHasCleanRun: false,
   now: () => new Date(),
   profileVersion: profile.version,
@@ -74,7 +74,7 @@ const result = await runApplication({
 2. **Job check.** The job must be `resume-ready` or `approved`. A job already in `submitting` is refused with `unsafe`: an interrupted submit is never retried blindly (Scenario O).
 3. **Blockers.** A plan with blockers (a required field that is unknown, a legal, personal, salary or demographic question with no approved answer, a required motivational question with no approved draft, a missing resume, no submit button) moves the job to `needs-you`. No browser opens.
 4. **Level.** `prepare` ends here as `staged`. Nothing is opened.
-5. **Daily limit.** If a submit could happen, `appliedToday()` must be below `dailyApplicationLimit`, else `limit-reached` is thrown before any browser opens.
+5. **Daily limit.** If a submit could happen, `appliedToday()` (jobs that moved to submitting, applied or unverified today) must be below `dailyApplicationLimit`, else `limit-reached` is thrown before any browser opens.
 6. **Open and check.** A CAPTCHA, sign-in wall, password field, one-time code or assessment moves the job to `needs-you`; a closed job moves it to `closed`. If the live form's shape hash differs from the plan's snapshot, nothing is filled (Scenario P).
 7. **Two-pass fill.** Fill every action, then read every field back. Any difference stops with `needs-you`.
 8. **Screenshot and evidence.** The screenshot is taken and evidence is saved. If saving fails, nothing is submitted.
@@ -97,7 +97,7 @@ Per field, in order: file inputs (resume, cover letter), then profile identity (
 | legal, personal, salary | `needs-you`                                                                                                                        |
 | demographic             | `settings.demographicAnswers`: `prefer-not-to-say` picks the option that says so when there is one; `ask-each-time` is `needs-you` |
 
-An approved answer that is not one of a drop-down's or radio group's choices is `needs-you`. A required field that is not `ready` is a blocker; an optional one is left blank.
+The kind comes from `classifyField`: the label first, then the field's code name, then (for a drop-down, radio or tick-box group) its choices, so a choice group is never easier to guess than a text box. Age, date of birth, caste, category, religion, nationality, gender, marital status, salary, CTC, LPA, package, remuneration, notice period and identity numbers (Aadhaar, PAN, SSN, passport) are never-guess kinds, also in German, French and Hindi. An approved answer that is not one of a drop-down's or radio group's choices is `needs-you`. A required field that is not `ready` is a blocker; an optional one is left blank.
 
 ## Files
 

@@ -135,7 +135,10 @@ function defaultMcpLaunch(): McpLaunch {
 /**
  * The `env` block of the MCP config: the data folder, plus a `${NAME}` reference for each mail
  * variable that is set in the parent. The config holds names, never values, so no secret is
- * written to disk; the `claude` command fills them in when it starts the server.
+ * written to disk; the `claude` command fills them in when it starts the server. Verified
+ * 2026-11-09 with a real `claude -p --mcp-config` call and a tiny server that reported its
+ * environment: a variable that the parent did not have under that name arrived with the right
+ * value, so the `${NAME}` form does expand (it is not just inheritance).
  * Example: with only SCOUT_IMAP_HOST set: `{ SCOUT_DATA_DIR: "/data", SCOUT_IMAP_HOST: "${SCOUT_IMAP_HOST}" }`.
  */
 export function buildMcpEnvironment(

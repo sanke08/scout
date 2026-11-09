@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { makePosting, profileForGreenhouse, sampleProfile } from "../src/apply/test-helpers.js";
 import { makeApplyWorld, type ApplyWorld, type ApplyWorldOptions } from "./apply-helpers.js";
+import type { JobStatus } from "../src/shared/index.js";
 import { FIXED_NOW } from "./helpers.js";
 
 const worlds: ApplyWorld[] = [];
@@ -383,6 +384,56 @@ describe("scout apply at level Automatic", () => {
     expect(made.browserOpens).toHaveLength(0);
     expect(made.prompts).toHaveLength(0);
     expect(statusOf(made)).toBe("approved");
+  });
+});
+
+describe("scout apply counts the daily limit like the autopilot", () => {
+  /** Puts job-2 in a status through the given steps. */
+  function moveOtherJob(made: ReturnType<typeof world>, steps: readonly JobStatus[]): void {
+    made.inspect((application) => {
+      application.jobStore.upsertPosting(otherPosting());
+      for (const step of steps) application.jobStore.transition("job-2", step, "test setup");
+    });
+  }
+
+  it("stops at the limit when another attempt today is still submitting (outcome unknown)", async () => {
+    const made = world({
+      settings: { ...AUTO_SETTINGS, dailyApplicationLimit: 1 },
+      jobStatus: "approved",
+      typedLines: ["yes"],
+    });
+    moveOtherJob(made, ["shortlisted", "resume-ready", "approved", "submitting"]);
+    const result = await made.run(["apply", "job-1"]);
+    expect(result.exitCode).toBe(5);
+    expect(allOutput(result)).toMatch(/limit of 1 applications/);
+    expect(made.browserOpens).toHaveLength(0);
+    expect(made.driver.calls.some((call) => call.startsWith("submit "))).toBe(false);
+  });
+
+  it("claims its slot atomically with the submit marker: a rival that got in during the fill wins, and nothing is clicked", async () => {
+    let rival = false;
+    const made = world({
+      settings: { ...AUTO_SETTINGS, dailyApplicationLimit: 1 },
+      jobStatus: "approved",
+      typedLines: ["yes"],
+      wrapDriver: (driver) => ({
+        ...driver,
+        screenshot: async () => {
+          // Another process takes today's last slot while this form is being filled.
+          if (!rival) {
+            rival = true;
+            moveOtherJob(made, ["shortlisted", "resume-ready", "approved", "submitting"]);
+          }
+          return driver.screenshot();
+        },
+      }),
+    });
+    const result = await made.run(["apply", "job-1"]);
+    expect(result.exitCode).toBe(5);
+    expect(allOutput(result)).toMatch(/limit of 1 applications/);
+    expect(made.driver.calls.some((call) => call.startsWith("submit "))).toBe(false);
+    expect(statusOf(made)).not.toBe("submitting");
+    expect(statusOf(made)).not.toBe("applied");
   });
 });
 

@@ -14,7 +14,7 @@ import { z } from "zod";
 import { readMailCredentials } from "../../app/commands/mail-credentials.js";
 import { createMailboxReader, matchMessageToJob } from "../../tracking/index.js";
 import { ScoutError } from "../../shared/index.js";
-import { ok, okOutside, outside, type ScoutTool } from "../tool.js";
+import { okOutside, outside, type ScoutTool } from "../tool.js";
 import { JOB_ID_LIMIT, safely } from "./act-support.js";
 
 /** Days back when `daysBack` is not given. */
@@ -123,7 +123,7 @@ export const mailAndNoteTools: ScoutTool[] = [
         for (const message of messages) {
           const match = matchMessageToJob(message, jobs);
           compact.push({
-            messageId: message.id,
+            messageId: outside(message.id, 200),
             fromAddress: outside(message.fromAddress, 200),
             ...(message.date === undefined ? {} : { date: message.date }),
             ...(match.kind === "matched"
@@ -134,7 +134,7 @@ export const mailAndNoteTools: ScoutTool[] = [
           });
           blocks.push(
             [
-              `--- ${message.id}`,
+              `--- ${outside(message.id, 200)}`,
               `From: ${outside(message.fromName, 100)} <${outside(message.fromAddress, 200)}>`,
               `Subject: ${outside(message.subject, 200)}`,
               outside(message.text.replace(/\s+/g, " ").trim(), BODY_PREVIEW_LIMIT),
@@ -154,7 +154,13 @@ export const mailAndNoteTools: ScoutTool[] = [
             })),
             untrustedText: blocks.join("\n\n"),
           },
-          ["messages[].fromAddress", "skipped[].messageId", "skipped[].reason", "untrustedText"],
+          [
+            "messages[].messageId",
+            "messages[].fromAddress",
+            "skipped[].messageId",
+            "skipped[].reason",
+            "untrustedText",
+          ],
         );
       }),
   } satisfies ScoutTool<typeof readInboxInput> as ScoutTool,
@@ -188,12 +194,16 @@ export const mailAndNoteTools: ScoutTool[] = [
         );
         application.folders.appendLogLine(folder.name, `Autopilot added a note to ${section}.`);
         context.note(`write_note ${job.id}: ${section}`);
-        return ok({
-          jobId: job.id,
-          section,
-          folder: folder.name,
-          characters: input.markdown.length,
-        });
+        return okOutside(
+          {
+            jobId: job.id,
+            section,
+            // The folder name is made from the posting's company and title (outside words).
+            folder: outside(folder.name, 200),
+            characters: input.markdown.length,
+          },
+          ["folder"],
+        );
       }),
   } satisfies ScoutTool<typeof writeNoteInput> as ScoutTool,
 ];

@@ -43,7 +43,7 @@ import {
 import { platformServices, type PlatformServices } from "./platform-services.js";
 import {
   LEVEL_NAMES,
-  countAppliedToday,
+  countSubmitsToday,
   describePlan,
   describeSubmission,
   effectiveLevel,
@@ -107,7 +107,7 @@ function loadApplicableJob(application: Application, jobId: string): JobRecord {
   if (job.status === "submitting") {
     throw new ScoutError(
       "unsafe",
-      `Job ${jobId} is already being submitted, or a submit was interrupted. Scout never retries a submit blindly; check the company's page and your email, then mark the job yourself.`,
+      `Job ${jobId} is already being submitted, or a submit was interrupted. Scout never retries a submit blindly; check the company's page and your email, then record the result with \`scout applications status ${jobId} applied\` (or \`unverified\`).`,
     );
   }
   if (job.status !== "resume-ready" && job.status !== "approved") {
@@ -190,7 +190,16 @@ function runArguments(
     settings: context.settings,
     jobs: context.application.jobStore,
     jobId: context.job.id,
-    appliedToday: () => countAppliedToday(context.application.actionLog, context.application.now()),
+    appliedToday: () => countSubmitsToday(context.application.actionLog, context.application.now()),
+    // The submit marker also claims today's slot in the same database transaction, exactly as the
+    // autopilot does, so two submits can never both pass at limit minus one. A refusal prints the
+    // same limit message as the check before the page opened.
+    markSubmitting: (reason: string) =>
+      context.application.claimSubmitSlot(
+        context.job.id,
+        reason,
+        context.settings.dailyApplicationLimit,
+      ),
     boardHasCleanRun: context.boardHasCleanRun,
     now: () => context.application.now(),
     profileVersion: context.profile.version,
@@ -464,7 +473,7 @@ export async function runApplyCommand(
   });
   if (
     submitPossible &&
-    countAppliedToday(application.actionLog, application.now()) >= settings.dailyApplicationLimit
+    countSubmitsToday(application.actionLog, application.now()) >= settings.dailyApplicationLimit
   ) {
     throw new ScoutError(
       "limit-reached",

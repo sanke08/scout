@@ -10,6 +10,7 @@ import { makePosting } from "../../apply/test-helpers.js";
 import { postingIdFromUrl } from "../../discovery/index.js";
 import { WAITING_FOR_SUBMIT_REASON } from "../../ledger/index.js";
 import { dataOf, errorOf, makeActWorld, type ActWorld } from "./act-test-helpers.js";
+import { jobTools } from "./read-job-tools.js";
 
 const worlds: ActWorld[] = [];
 afterEach(() => {
@@ -181,18 +182,39 @@ describe("the ledger tools", () => {
     expect(history).toContain(quote);
   });
 
-  it("lets a form that waits for the owner's submit be recorded as applied, from wherever it came", async () => {
+  it("lets a form a helper really has open be recorded as applied, from wherever it came", async () => {
     for (const origin of ["shortlisted", "resume-ready", "approved"] as const) {
-      const made = makeActWorld({ jobStatus: origin });
+      const recorded: { detail?: Record<string, unknown>; moved?: Record<string, unknown> } = {};
+      const holder: { made?: ActWorld } = {};
+      const made = makeActWorld({
+        jobStatus: origin,
+        settings: { boardLevels: { greenhouse: "fill" } },
+        wrapDriver: (driver) => ({
+          ...driver,
+          readConfirmation: async () => {
+            // The helper is waiting: the owner (here through the model's tool) says they submitted.
+            const world = holder.made!;
+            if (recorded.moved === undefined && world.status() === "needs-you") {
+              recorded.detail = dataOf(await world.call("get_application", { jobId: "job-1" }));
+              recorded.moved = dataOf(
+                await world.call("update_application_status", {
+                  jobId: "job-1",
+                  status: "applied",
+                }),
+              );
+            }
+            return "";
+          },
+        }),
+      });
+      holder.made = made;
       worlds.push(made);
-      made.application.jobStore.transition("job-1", "needs-you", WAITING_FOR_SUBMIT_REASON);
-      const detail = dataOf(await made.call("get_application", { jobId: "job-1" }));
-      expect(detail["status"]).toBe("needs-you");
-      expect(detail["allowedStatuses"]).toContain("applied");
-      const moved = dataOf(
-        await made.call("update_application_status", { jobId: "job-1", status: "applied" }),
-      );
-      expect(moved["status"]).toBe("applied");
+      await made.call("apply_to_job", { jobId: "job-1" });
+      await made.runHelper({ wait: "6" });
+      expect(recorded.detail?.["status"]).toBe("needs-you");
+      expect(recorded.detail?.["allowedStatuses"]).toContain("applied");
+      expect(recorded.moved?.["status"], origin).toBe("applied");
+      expect(made.status()).toBe("applied");
       // It was sent, so it can never be reopened or applied for again.
       expect(() => made.application.jobStore.transition("job-1", "approved", "again")).toThrow();
       expect(errorOf(await made.call("apply_to_job", { jobId: "job-1" }))).toMatch(
@@ -209,6 +231,73 @@ describe("the ledger tools", () => {
       errorOf(await made.call("update_application_status", { jobId: "job-1", status: "applied" })),
     ).toBeTruthy();
     expect(made.status()).toBe("needs-you");
+  });
+
+  it("never treats words as a hand-over: the exact waiting sentence, written by anyone, proves nothing", async () => {
+    // Written straight to the store, as a stale or hand-edited reason would be.
+    const typed = makeActWorld({ jobStatus: "shortlisted" });
+    worlds.push(typed);
+    typed.application.jobStore.transition("job-1", "needs-you", WAITING_FOR_SUBMIT_REASON);
+    expect(
+      errorOf(await typed.call("update_application_status", { jobId: "job-1", status: "applied" })),
+    ).toBeTruthy();
+    expect(typed.status()).toBe("needs-you");
+
+    // Written by the model through flag_for_user, for every status a job can be flagged from.
+    for (const origin of ["shortlisted", "resume-ready", "approved"] as const) {
+      const made = makeActWorld({ jobStatus: origin });
+      worlds.push(made);
+      const flag = jobTools.find((tool) => tool.name === "flag_for_user")!;
+      const flagged = await flag.handler(
+        { jobId: "job-1", question: "Need you: waiting for you to press submit" },
+        {
+          application: made.application,
+          assertNotPaused: () => made.application.assertNotPaused(),
+          note: () => {},
+        },
+      );
+      expect(flagged.ok).toBe(true);
+      expect(made.application.jobStore.get("job-1")?.statusReason ?? "").not.toMatch(
+        /waiting for you to press submit/i,
+      );
+      expect(
+        errorOf(
+          await made.call("update_application_status", { jobId: "job-1", status: "applied" }),
+        ),
+      ).toBeTruthy();
+      expect(made.status()).toBe("needs-you");
+    }
+  });
+
+  it("forgets the hand-off once the helper gave up, so a later flag cannot be recorded as applied", async () => {
+    const made = makeActWorld({
+      jobStatus: "shortlisted",
+      settings: { boardLevels: { greenhouse: "fill" } },
+    });
+    worlds.push(made);
+    await made.call("apply_to_job", { jobId: "job-1" });
+    await made.runHelper({ wait: "0" });
+    expect(made.status()).toBe("resume-ready");
+    made.application.jobStore.transition("job-1", "needs-you", "Is this role remote?");
+    expect(
+      errorOf(await made.call("update_application_status", { jobId: "job-1", status: "applied" })),
+    ).toBeTruthy();
+  });
+
+  it("refuses closed without a quoted evidence, because closed can never be undone", async () => {
+    const made = world();
+    expect(
+      errorOf(await made.call("update_application_status", { jobId: "job-1", status: "closed" })),
+    ).toMatch(/evidence/);
+    expect(made.status()).toBe("applied");
+    const closed = dataOf(
+      await made.call("update_application_status", {
+        jobId: "job-1",
+        status: "closed",
+        evidence: "This position is no longer accepting applications.",
+      }),
+    );
+    expect(closed["status"]).toBe("closed");
   });
 
   it("returns words from outside cleaned and names them in outsideFields", async () => {

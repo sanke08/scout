@@ -12,7 +12,7 @@
  * identity) for Email and `needs-you` (kind `personal`) for the second field.
  */
 import type { AnswerEntry, AnswerKind, Identity, Profile, Settings } from "../shared/index.js";
-import { classifyQuestion } from "./classify-question.js";
+import { classifyField } from "./classify-question.js";
 import type { FormField, FormSnapshot } from "./form-types.js";
 
 /**
@@ -285,7 +285,7 @@ function mapOneField(
       "Taken from the identity in your profile.",
     );
   }
-  const kind = classifyQuestion(field.label);
+  const kind = classifyField(field);
   const entry = findBankAnswer(field.label, bank);
   if (entry !== undefined) return mapBankAnswer(field, entry, kind);
   return mapUnansweredQuestion(field, kind, settings);
