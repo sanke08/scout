@@ -5,7 +5,7 @@
  * preview reads back structure, the allow-list matches the folder, and Digest keys call the API.
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS } from "../shared/index.js";
 import { STATIC_FILES } from "./static-files.js";
 
@@ -664,5 +664,300 @@ describe("instant saves", () => {
     await new Promise((resolve) => setTimeout(resolve, 40));
     expect(sent).toHaveLength(2);
     expect(sent[1]).toMatchObject({ automationPaused: true, readAlertEmails: true });
+  });
+});
+
+describe("pause control", () => {
+  interface PauseModule {
+    createPauseControl: (
+      root: FakeNode,
+      context: unknown,
+      onChanged: (settings: unknown) => void,
+    ) => { load: () => Promise<void>; sync: (paused: boolean) => void };
+  }
+
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  const button = (root: FakeNode, text: string): FakeNode | undefined =>
+    root.findAll((node) => node.tagName === "button" && node.textContent === text)[0];
+
+  async function open() {
+    const { createPauseControl } = await loadModule<PauseModule>("pause-control.js");
+    const stored = { ...DEFAULT_SETTINGS, mainEngine: "codex" };
+    const sent: Record<string, unknown>[] = [];
+    const api = {
+      getSettings: async () => ({ settings: { ...stored } }),
+      putSettings: async (settings: Record<string, unknown>) => {
+        sent.push(settings);
+        Object.assign(stored, settings);
+        return { settings: { ...stored } };
+      },
+    };
+    const changed: unknown[] = [];
+    const root = new FakeNode();
+    const control = createPauseControl(
+      root,
+      { api, showError: () => undefined, clearError: () => undefined },
+      (settings) => changed.push(settings),
+    );
+    await control.load();
+    return { root, control, sent, changed };
+  }
+
+  it("pauses with one click, keeping every other setting", async () => {
+    const { root, sent, changed } = await open();
+    button(root, "Pause automation")?.click();
+    await settle();
+    expect(sent).toEqual([{ ...DEFAULT_SETTINGS, mainEngine: "codex", automationPaused: true }]);
+    expect(changed).toHaveLength(1);
+    expect(button(root, "Resume automation")).toBeDefined();
+  });
+
+  it("asks once before resuming and changes nothing until it is confirmed", async () => {
+    const { root, control, sent } = await open();
+    control.sync(true);
+    button(root, "Resume automation")?.click();
+    expect(sent).toEqual([]);
+    expect(root.textContent).toContain("Let Scout fill forms and submit again?");
+    button(root, "Cancel")?.click();
+    expect(sent).toEqual([]);
+    button(root, "Resume automation")?.click();
+    button(root, "Yes, resume")?.click();
+    await settle();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ automationPaused: false });
+    expect(button(root, "Pause automation")).toBeDefined();
+  });
+});
+
+describe("control view", () => {
+  interface ControlModule {
+    createControlView: (
+      root: FakeNode,
+      context: unknown,
+      onPaused: (paused: boolean) => void,
+    ) => { load: () => Promise<void> };
+  }
+
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  const NO_RUN = { running: null, last: null, lastByName: {} };
+
+  function platform(name: string, known = true) {
+    return {
+      name,
+      known,
+      login: "manual",
+      level: "prepare",
+      credentialsSaved: "no",
+      lastSignInAt: null,
+    };
+  }
+
+  /** A fake API with state the test can change, recording every call. */
+  function fakeApi(overrides: Record<string, unknown> = {}) {
+    const calls: string[] = [];
+    const data = {
+      health: {
+        ok: true,
+        report: {
+          automationPaused: false,
+          heartbeatStale: false,
+          lastRunAt: "2026-11-09T08:00:00.000Z",
+          queueSizes: { found: 3, approved: 1, applied: 0 },
+          modelCallsToday: 7,
+          modelCallBudget: 40,
+          watchedBoards: 2,
+          needsYou: [
+            { id: "n1", company: "ExampleCorp", title: "Role", reason: "A code is needed" },
+          ],
+        },
+        approved: [{ id: "job-9", company: "ExampleCorp", title: "Backend Engineer" }],
+        modelName: "Sonnet 5.5",
+      } as Record<string, unknown>,
+      actions: { ...NO_RUN } as Record<string, unknown>,
+      platforms: {
+        platforms: [platform("indeed"), platform("linkedin"), platform("naukri")],
+        keychainAvailable: true,
+        warning: "Automating these sites may break their terms and risk the account.",
+      },
+    };
+    const api = {
+      getHealth: async () => data.health,
+      getActions: async () => {
+        calls.push("getActions");
+        return data.actions;
+      },
+      startAction: async (name: string) => {
+        calls.push(`start ${name}`);
+        data.actions = {
+          running: { name, startedAt: "2026-11-09T09:00:00.000Z" },
+          last: null,
+          lastByName: {},
+        };
+        return data.actions;
+      },
+      getPlatforms: async () => data.platforms,
+      putPlatform: async (name: string, body: Record<string, unknown>) => {
+        calls.push(`put ${name} ${JSON.stringify(body)}`);
+        return data.platforms;
+      },
+      ...overrides,
+    };
+    return { api, calls, data };
+  }
+
+  async function open(fake = fakeApi()) {
+    const { createControlView } = await loadModule<ControlModule>("control-view.js");
+    const errors: string[] = [];
+    const paused: boolean[] = [];
+    const root = new FakeNode();
+    const view = createControlView(
+      root,
+      {
+        api: fake.api,
+        showError: (message: string) => errors.push(message),
+        clearError: () => undefined,
+      },
+      (value) => paused.push(value),
+    );
+    await view.load();
+    return { root, view, errors, paused, ...fake };
+  }
+
+  const byId = (root: FakeNode, id: string): FakeNode =>
+    root.findAll((node) => node.attributes.get("id") === id)[0]!;
+
+  it("shows the status, the one-line model, and the approved job with its terminal command", async () => {
+    const { root, paused } = await open();
+    expect(root.textContent).toContain("Running");
+    expect(root.textContent).toContain("found 3");
+    expect(root.textContent).not.toContain("applied 0");
+    expect(root.textContent).toContain("ExampleCorp, Role: A code is needed");
+    expect(root.textContent).toContain("Model: Sonnet 5.5. Model calls today: 7 of 40.");
+    expect(root.textContent).toContain("scout apply job-9");
+    expect(paused).toEqual([false]);
+  });
+
+  it("disables both actions while one runs and polls only until it finishes", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = fakeApi();
+      const { root } = await open(fake);
+      expect(byId(root, "action-discover").attributes.has("disabled")).toBe(false);
+      byId(root, "action-discover").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fake.calls).toContain("start discover");
+      expect(byId(root, "action-discover").attributes.has("disabled")).toBe(true);
+      expect(byId(root, "action-inbox").attributes.has("disabled")).toBe(true);
+
+      const before = fake.calls.filter((call) => call === "getActions").length;
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(fake.calls.filter((call) => call === "getActions").length).toBe(before + 1);
+
+      fake.data.actions = {
+        running: null,
+        last: null,
+        lastByName: {
+          discover: {
+            name: "discover",
+            ok: false,
+            summary: "There is no profile yet.",
+            startedAt: "2026-11-09T09:00:00.000Z",
+            finishedAt: "2026-11-09T09:00:05.000Z",
+          },
+        },
+      };
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(root.textContent).toContain("Failed");
+      expect(root.textContent).toContain("There is no profile yet.");
+      expect(byId(root, "action-discover").attributes.has("disabled")).toBe(false);
+      const after = fake.calls.filter((call) => call === "getActions").length;
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(fake.calls.filter((call) => call === "getActions").length).toBe(after);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("turns the inbox button off while paused and shows a refusal sentence", async () => {
+    const fake = fakeApi();
+    (fake.data.health["report"] as Record<string, unknown>)["automationPaused"] = true;
+    const { root } = await open(fake);
+    expect(byId(root, "action-inbox").attributes.has("disabled")).toBe(true);
+    expect(root.textContent).toContain("Reading mail is off while automation is paused.");
+
+    const refused = fakeApi({
+      startAction: async () => {
+        throw new Error("Another action is still running. Wait for it to finish.");
+      },
+    });
+    const view = await open(refused);
+    byId(view.root, "action-discover").click();
+    await settle();
+    expect(view.errors).toEqual(["Another action is still running. Wait for it to finish."]);
+  });
+
+  it("saves a safe platform change at once", async () => {
+    const { root, calls } = await open();
+    byId(root, "level-indeed").fire("change", { target: { value: "fill" } });
+    await settle();
+    expect(calls).toContain('put indeed {"level":"fill"}');
+  });
+
+  it("holds a risky change until the platform name is typed, then sends it with the name", async () => {
+    const { root, calls } = await open();
+    byId(root, "level-linkedin").fire("change", { target: { value: "auto" } });
+    expect(calls.some((call) => call.startsWith("put"))).toBe(false);
+    expect(root.textContent).toContain("Automating these sites may break their terms");
+    const save = root.querySelector('[data-save="linkedin"]')!;
+    expect(save.attributes.has("disabled")).toBe(true);
+
+    // In a browser the `disabled` property also drives the attribute; the fake only stores the property.
+    const isDisabled = (): unknown => (save as unknown as { disabled: unknown }).disabled;
+    byId(root, "confirm-linkedin").fire("input", { target: { value: "link" } });
+    expect(isDisabled()).toBe(true);
+    byId(root, "confirm-linkedin").fire("input", { target: { value: " LinkedIn " } });
+    expect(isDisabled()).toBe(false);
+
+    const form = root.findAll((node) => node.tagName === "form")[0]!;
+    form.fire("submit", { preventDefault: () => undefined });
+    await settle();
+    expect(calls).toContain('put linkedin {"level":"auto","confirm":" LinkedIn "}');
+  });
+
+  it("asks for the name before saved sign-in too, and shows both sign-in commands", async () => {
+    const { root, calls } = await open();
+    byId(root, "login-naukri").fire("change", { target: { value: "saved" } });
+    expect(calls.some((call) => call.startsWith("put"))).toBe(false);
+    expect(root.textContent).toContain("scout login naukri");
+    expect(root.textContent).toContain("scout login naukri --save");
+  });
+
+  it("has no password field and shows hostile server text as plain text", async () => {
+    const hostile = "<img src=x onerror=alert(1)>";
+    const fake = fakeApi();
+    const report = fake.data.health["report"] as Record<string, unknown>;
+    report["needsYou"] = [{ id: "n1", company: hostile, title: hostile, reason: hostile }];
+    fake.data.health["approved"] = [{ id: "a b; rm -rf", company: hostile, title: hostile }];
+    fake.data.platforms.platforms = [platform(hostile, false)];
+    const { root } = await open(fake);
+    expect(root.textContent).toContain(hostile);
+    expect(root.elements.some((node) => node.tagName === "img")).toBe(false);
+    expect(root.elements.some((node) => node.attributes.get("type") === "password")).toBe(false);
+    expect(root.textContent).not.toContain("scout apply a b");
+  });
+
+  it("leaves out a section the server does not provide", async () => {
+    const fake = fakeApi({
+      getActions: async () => {
+        throw new Error("Actions are not enabled.");
+      },
+      getPlatforms: async () => {
+        throw new Error("Platform settings are not enabled.");
+      },
+    });
+    const { root, errors } = await open(fake);
+    expect(errors).toEqual([]);
+    expect(root.textContent).not.toContain("Find jobs now");
+    expect(root.textContent).not.toContain("Platforms");
   });
 });

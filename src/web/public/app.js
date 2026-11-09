@@ -1,7 +1,7 @@
 /* global document, window, location */
 /**
- * Starts the page: wires the four views (Digest, Profile, Applications, Settings) to the address hash
- * (#digest, #profile, #applications, #settings), shows the status line and the error banner, and passes
+ * Starts the page: wires the five views (Digest, Control, Profile, Applications, Settings) to the address hash
+ * (#digest, #control, #profile, #applications, #settings), shows the status line and the error banner, and passes
  * keystrokes to the Digest.
  */
 import { api } from "./api-client.js";
@@ -10,9 +10,11 @@ import { createDigestView } from "./digest-view.js";
 import { createApplicationsView } from "./applications-view.js";
 import { createProfileView } from "./profile-view.js";
 import { createSettingsView } from "./settings-view.js";
+import { createControlView } from "./control-view.js";
+import { createPauseControl } from "./pause-control.js";
 
 /** The names of the views, in navigation order. */
-const VIEW_NAMES = ["digest", "profile", "applications", "settings"];
+const VIEW_NAMES = ["digest", "control", "profile", "applications", "settings"];
 
 /** Plain-words label for each apply mode shown in the status line. */
 const MODE_LABELS = {
@@ -64,6 +66,7 @@ function onDigestFacts(facts) {
   status.mode = facts.mode;
   status.paused = facts.automationPaused;
   renderStatus();
+  pause.sync(status.paused);
 }
 
 /** Called by Settings after a save, so the status line follows the new mode and pause state. */
@@ -71,6 +74,14 @@ function onSettingsChanged(settings) {
   status.mode = settings.applyMode;
   status.paused = settings.automationPaused;
   renderStatus();
+  pause.sync(status.paused);
+}
+
+/** Called by the Control tab when its health report says whether automation is paused. */
+function onControlFacts(paused) {
+  status.paused = paused;
+  renderStatus();
+  pause.sync(paused);
 }
 
 /** Shows how many next steps are due beside the Applications tab; nothing when none are. */
@@ -81,8 +92,14 @@ function onDueCount(count) {
 }
 
 const context = { api, showError, clearError };
+const pause = createPauseControl(
+  document.getElementById("pauseControl"),
+  context,
+  onSettingsChanged,
+);
 const views = {
   digest: createDigestView(document.getElementById("viewDigest"), context, onDigestFacts),
+  control: createControlView(document.getElementById("viewControl"), context, onControlFacts),
   profile: createProfileView(document.getElementById("viewProfile"), context),
   applications: createApplicationsView(
     document.getElementById("viewApplications"),
@@ -120,5 +137,6 @@ document.addEventListener("keydown", (event) => {
   views.digest.handleKey(event);
 });
 window.addEventListener("hashchange", route);
+void pause.load();
 route();
 if (currentViewName() !== "applications") void views.applications.refreshDueCount();

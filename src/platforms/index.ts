@@ -26,5 +26,19 @@ export {
   type AutoLoginResult,
   type LoginContext,
 } from "./login.js";
-export { createSessionStore, type PlatformSession, type SessionStore } from "./session-store.js";
+export {
+  createSessionStore,
+  latestSignIn,
+  type PlatformSession,
+  type SessionStore,
+} from "./session-store.js";
 export { resolveVault, type PlatformOverrides } from "./platform-overrides.js";
+export {
+  AUTOMATION_WARNING,
+  applyPlatformChoice,
+  assertSavedLoginPossible,
+  confirmationMatches,
+  describePlatformChoice,
+  isRiskyPlatformChoice,
+  type PlatformChoice,
+} from "./platform-choice.js";

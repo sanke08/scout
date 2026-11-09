@@ -12,30 +12,22 @@
  * No job is created from a lead.
  */
 import type { Command } from "commander";
-import { ScoutError } from "../../shared/index.js";
 import {
-  createMailboxReader,
-  detectAlertPlatform,
   parseAlertEmail,
   resolveToOfficialBoard,
-  trackMessages,
   type ParsedMessage,
   type SkippedMessage,
   type TrackedMessage,
 } from "../../tracking/index.js";
 import type { Application, ApplicationOptions } from "../application.js";
+import {
+  DEFAULT_DAYS_BACK,
+  DEFAULT_MAIL_FOLDER,
+  countStatusChanges,
+  runInboxPass,
+} from "../inbox-pass.js";
 import { createBoardLookup } from "./mail-board-lookup.js";
-import { readMailCredentials } from "./mail-credentials.js";
 import { withApplication } from "./with-application.js";
-
-/** The mail folder read when `--folder` is not given. */
-export const DEFAULT_MAIL_FOLDER = "INBOX";
-
-/** How many days back the command reads when `--since` is not given. */
-export const DEFAULT_DAYS_BACK = 14;
-
-/** Milliseconds in one day. */
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** The longest piece of untrusted mail text printed on one line. */
 const MAXIMUM_PRINTED_CHARACTERS = 70;
@@ -49,19 +41,6 @@ export function oneLine(text: string, limit = MAXIMUM_PRINTED_CHARACTERS): strin
   // eslint-disable-next-line no-control-regex
   const flat = text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").trim();
   return flat.length <= limit ? flat : `${flat.slice(0, limit - 1)}…`;
-}
-
-/** Reads `--since`, a date like 2026-11-01, or returns `DEFAULT_DAYS_BACK` days before `now`. */
-function parseSince(text: string | undefined, now: Date): Date {
-  if (text === undefined) return new Date(now.getTime() - DEFAULT_DAYS_BACK * DAY_MS);
-  const date = new Date(`${text}T00:00:00.000Z`);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(date.getTime())) {
-    throw new ScoutError(
-      "invalid-input",
-      `"${text}" is not a date. Write --since as YYYY-MM-DD, for example --since 2026-11-01.`,
-    );
-  }
-  return date;
 }
 
 /** Pads text to a column width. */
@@ -138,42 +117,26 @@ function printSkipped(skipped: SkippedMessage[]): void {
     console.log(`  message ${oneLine(entry.messageId)}: ${oneLine(entry.reason, 150)}`);
 }
 
-/** Runs the command. */
+/** Runs the command: one inbox pass, then prints what it found. */
 async function readInbox(
   application: Application,
   options: { since?: string; folder?: string },
 ): Promise<void> {
-  // Reading mail also moves job statuses (an interview invite becomes `interviewing`), so the kill
-  // switch applies here too.
-  application.assertNotPaused();
-  const credentials = readMailCredentials(application.environment);
-  const since = parseSince(options.since, application.now());
-  const folder = options.folder ?? DEFAULT_MAIL_FOLDER;
-  const reader = createMailboxReader({ connect: application.mailboxConnector(credentials) });
-  const { messages, skipped } = await reader.readSince(folder, since);
-
-  const alerts = messages.filter((message) => detectAlertPlatform(message) !== undefined);
-  const others = messages.filter((message) => detectAlertPlatform(message) === undefined);
-  const tracked = await trackMessages({
-    messages: others,
-    jobStore: application.jobStore,
-    actionLog: application.actionLog,
-  });
-  const byId = new Map(others.map((message) => [message.id, message] as const));
-  const subjects = new Map(others.map((message) => [message.id, message.subject] as const));
-  const matched = tracked.filter((entry) => entry.match.kind === "matched");
-  const unmatched = tracked.filter((entry) => entry.match.kind !== "matched");
+  const report = await runInboxPass(application, options);
+  const byId = new Map(report.others.map((message) => [message.id, message] as const));
+  const subjects = new Map(report.others.map((message) => [message.id, message.subject] as const));
+  const matched = report.tracked.filter((entry) => entry.match.kind === "matched");
+  const unmatched = report.tracked.filter((entry) => entry.match.kind !== "matched");
 
   console.log(
-    `Read ${messages.length} message(s) from ${folder} since ${since.toISOString().slice(0, 10)}. Read-only: nothing was sent, deleted, moved or marked as read.`,
+    `Read ${report.messages.length} message(s) from ${report.folder} since ${report.since.toISOString().slice(0, 10)}. Read-only: nothing was sent, deleted, moved or marked as read.`,
   );
   if (matched.length > 0) printMatched(application, matched, subjects);
   if (unmatched.length > 0) printUnmatched(unmatched, byId);
-  const leadCount = alerts.length > 0 ? await printLeads(application, alerts) : 0;
-  if (skipped.length > 0) printSkipped(skipped);
-  const changed = tracked.filter((entry) => entry.outcome?.changed === true).length;
+  const leadCount = report.alerts.length > 0 ? await printLeads(application, report.alerts) : 0;
+  if (report.skipped.length > 0) printSkipped(report.skipped);
   console.log(
-    `Summary: ${changed} status change(s), ${matched.length} matched, ${unmatched.length} unmatched, ${leadCount} lead(s), ${skipped.length} skipped.`,
+    `Summary: ${countStatusChanges(report)} status change(s), ${matched.length} matched, ${unmatched.length} unmatched, ${leadCount} lead(s), ${report.skipped.length} skipped.`,
   );
 }
 

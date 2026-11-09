@@ -28,6 +28,18 @@ export const platformSessionSchema = z.object({
 /** The TypeScript type of one platform's record. */
 export type PlatformSession = z.infer<typeof platformSessionSchema>;
 
+/**
+ * The later of the last manual and the last successful automatic sign-in, or `undefined` when
+ * neither happened. Example: manual at 09:00 and automatic at 10:00 gives the 10:00 time.
+ */
+export function latestSignIn(session: PlatformSession | undefined): string | undefined {
+  const manual = session?.lastManualLoginAt;
+  const automatic = session?.lastAutoLoginAt;
+  if (manual === undefined) return automatic;
+  if (automatic === undefined) return manual;
+  return manual > automatic ? manual : automatic;
+}
+
 /** The whole file. */
 const sessionFileSchema = z.object({
   schemaVersion: z.literal(1),

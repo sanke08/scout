@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 import { EVENT_KINDS, newEventSchema } from "../ledger/index.js";
-import { JOB_STATUSES } from "../shared/index.js";
+import { JOB_STATUSES, boardLevelSchema, platformLoginSchema } from "../shared/index.js";
 
 /** The tags a user can give when skipping a job. They feed back into the filters later. */
 export const SKIP_TAGS = ["Wrong location", "Too junior", "Company", "Not interested"] as const;
@@ -51,3 +51,19 @@ export const pageEventBodySchema = newEventSchema.refine(
   (event) => PAGE_EVENT_KINDS.includes(event.kind),
   { message: `kind: Use one of ${PAGE_EVENT_KINDS.join(", ")}.`, path: ["kind"] },
 );
+
+/**
+ * Body of `PUT /api/platforms/:name`: the new sign-in way and/or apply level, and the platform name
+ * typed again as confirmation (needed for saved sign-in or automatic level on linkedin, indeed or naukri).
+ * Example: `{ "level": "auto", "confirm": "linkedin" }`. It never carries a password.
+ */
+export const platformBodySchema = z
+  .object({
+    login: platformLoginSchema.optional(),
+    level: boardLevelSchema.optional(),
+    confirm: z.string().max(60).optional(),
+  })
+  .strict()
+  .refine((body) => body.login !== undefined || body.level !== undefined, {
+    message: "Give a login way, an apply level, or both.",
+  });

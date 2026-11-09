@@ -34,6 +34,11 @@ export async function request(method, path, body) {
 
 /** One function per route; the server's README lists the same routes. */
 export const api = {
+  getHealth: () => request("GET", "/api/health"),
+  getActions: () => request("GET", "/api/actions"),
+  startAction: (name) => request("POST", `/api/actions/${encodeURIComponent(name)}`),
+  getPlatforms: () => request("GET", "/api/platforms"),
+  putPlatform: (name, body) => request("PUT", `/api/platforms/${encodeURIComponent(name)}`, body),
   getDigest: () => request("GET", "/api/digest"),
   getProfile: () => request("GET", "/api/profile"),
   putProfile: (profile) => request("PUT", "/api/profile", profile),

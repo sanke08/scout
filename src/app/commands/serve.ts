@@ -51,7 +51,12 @@ export function registerServe(program: Command, overrides: ApplicationOptions): 
     .action((options: { port?: string }) =>
       withApplication(overrides, async (application) => {
         const port = parsePort(options.port);
-        const server = await startWebServer(createWebDependencies(application), { port });
+        const server = await startWebServer(
+          createWebDependencies(application, {
+            ...(overrides.platforms === undefined ? {} : { platforms: overrides.platforms }),
+          }),
+          { port },
+        );
         console.log(`Scout is running at ${server.url}`);
         console.log("Press Ctrl-C to stop.");
         await waitForStopSignal();

@@ -14,17 +14,31 @@ import {
   type JobStatus,
 } from "../shared/index.js";
 import { applicationDetailsSchema, manualApplicationSchema, type Ledger } from "../ledger/index.js";
+import {
+  AUTOMATION_WARNING,
+  KNOWN_PLATFORMS,
+  applyPlatformChoice,
+  assertSavedLoginPossible,
+  confirmationMatches,
+  describePlatformChoice,
+  isRiskyPlatformChoice,
+  latestSignIn,
+  normalisePlatformName,
+  type PlatformChoice,
+} from "../platforms/index.js";
 import { HttpError, describeValidationError } from "./http-helpers.js";
 import {
   SKIP_TAGS,
   emptyBodySchema,
   jobIdSchema,
   pageEventBodySchema,
+  platformBodySchema,
   resumeBodySchema,
   skipBodySchema,
   statusBodySchema,
 } from "./schemas.js";
-import type { DigestCard, WebDependencies } from "./types.js";
+import type { ActionRunner } from "./action-runner.js";
+import type { DigestCard, PlatformControl, WebDependencies } from "./types.js";
 
 /** What a handler returns: the status and the JSON body to send. */
 export interface RouteReply {
@@ -112,8 +126,24 @@ function cardView(card: DigestCard): Record<string, unknown> {
   };
 }
 
-/** `GET /api/health`: tells a script or the page that the server is up. */
-const health: RouteHandler = () => ({ status: 200, body: { ok: true } });
+/**
+ * `GET /api/health`: tells a script or the page that the server is up. When the server was given a
+ * health report it also carries `report` (queue sizes, jobs that need the owner, model calls today)
+ * and `approved` (jobs approved and waiting for `scout apply`), plus the model name when known.
+ */
+const health: RouteHandler = ({ dependencies }) => {
+  if (dependencies.healthReport === undefined) return { status: 200, body: { ok: true } };
+  const approved = dependencies.jobStore.list({ status: "approved" }).map(jobView);
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      report: dependencies.healthReport(),
+      approved,
+      modelName: dependencies.modelName,
+    },
+  };
+};
 
 /** `GET /api/profile`: the profile, plus pending model proposals when there are any. */
 const getProfile: RouteHandler = ({ dependencies }) => {
@@ -257,6 +287,100 @@ const addApplicationEvent: RouteHandler = (context) => {
   return { status: 201, body: ledger.addEvent(jobIdOf(context), input) };
 };
 
+/** The action runner behind the Control tab. Failure: 404 when this server was started without one. */
+function runnerOf(context: RouteContext): ActionRunner {
+  const { actions } = context.dependencies;
+  if (actions === undefined) throw new HttpError(404, "Actions are not enabled.");
+  return actions;
+}
+
+/** `GET /api/actions`: what is running and the last result of each action. */
+const getActions: RouteHandler = (context) => ({
+  status: 200,
+  body: runnerOf(context).state(),
+});
+
+/**
+ * `POST /api/actions/:name`: starts `discover` or `inbox` in the background. 202 when started, 409
+ * while another action runs or when the kill switch blocks the inbox, 404 for an unknown name.
+ */
+const startAction: RouteHandler = (context) => {
+  const runner = runnerOf(context);
+  parseInput(emptyBodySchema, context.body);
+  return { status: 202, body: runner.start(context.params["name"] ?? "") };
+};
+
+/** The platform settings behind the Control tab. Failure: 404 when this server was started without them. */
+function platformsOf(context: RouteContext): PlatformControl {
+  const { platforms } = context.dependencies;
+  if (platforms === undefined) throw new HttpError(404, "Platform settings are not enabled.");
+  return platforms;
+}
+
+/** The page's view of every platform: its settings, whether credentials are saved and the last sign-in. */
+async function platformsView(context: RouteContext): Promise<Record<string, unknown>> {
+  const control = platformsOf(context);
+  const settings = context.dependencies.settingsStore.load();
+  const sessions = control.sessions.list();
+  const names = new Set<string>(KNOWN_PLATFORMS.map((platform) => platform.name));
+  for (const name of Object.keys(settings.platformLogins)) names.add(name);
+  for (const name of Object.keys(sessions)) names.add(name);
+  const keychainAvailable = control.vault.isSupported();
+  const platforms: Record<string, unknown>[] = [];
+  for (const name of [...names].sort()) {
+    const session = sessions[name];
+    let credentialsSaved: "yes" | "no" | "no-keychain" | "unknown" = "no";
+    if (!keychainAvailable) credentialsSaved = "no-keychain";
+    else if (session?.username !== undefined) {
+      try {
+        credentialsSaved = (await control.vault.exists(name, session.username)) ? "yes" : "no";
+      } catch {
+        credentialsSaved = "unknown";
+      }
+    }
+    platforms.push({
+      name,
+      known: KNOWN_PLATFORMS.some((platform) => platform.name === name),
+      login: settings.platformLogins[name] ?? "manual",
+      level: settings.boardLevels[name] ?? "prepare",
+      credentialsSaved,
+      lastSignInAt: latestSignIn(session) ?? null,
+    });
+  }
+  return { platforms, keychainAvailable, warning: AUTOMATION_WARNING };
+}
+
+/** `GET /api/platforms`: every platform with its login way, apply level, credentials flag and last sign-in. */
+const getPlatforms: RouteHandler = async (context) => ({
+  status: 200,
+  body: await platformsView(context),
+});
+
+/**
+ * `PUT /api/platforms/:name`: changes the login way and/or apply level of one platform. Saved
+ * sign-in or an automatic level on linkedin, indeed or naukri also needs `confirm` to be the
+ * platform name; without it the answer is 400 and nothing changes.
+ */
+const putPlatform: RouteHandler = async (context) => {
+  const control = platformsOf(context);
+  const platform = normalisePlatformName(context.params["name"] ?? "");
+  const body = parseInput(platformBodySchema, context.body);
+  const choice: PlatformChoice = {};
+  if (body.login !== undefined) choice.login = body.login;
+  if (body.level !== undefined) choice.level = body.level;
+  assertSavedLoginPossible(platform, choice, control.vault);
+  if (isRiskyPlatformChoice(platform, choice) && !confirmationMatches(platform, body.confirm)) {
+    throw new HttpError(
+      400,
+      `Type the platform name (${platform}) to confirm this change. ${AUTOMATION_WARNING}`,
+    );
+  }
+  const { settingsStore } = context.dependencies;
+  settingsStore.save(applyPlatformChoice(settingsStore.load(), platform, choice));
+  control.recordChange?.(describePlatformChoice(platform, choice));
+  return { status: 200, body: await platformsView(context) };
+};
+
 /** Every route of the API. The README documents the same table. */
 export const ROUTES: readonly Route[] = [
   { method: "GET", pattern: "/api/health", handler: health },
@@ -269,6 +393,10 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", pattern: "/api/jobs/:id/skip", handler: skipJob },
   { method: "POST", pattern: "/api/jobs/:id/undo", handler: undoJob },
   { method: "POST", pattern: "/api/resume", handler: buildResume },
+  { method: "GET", pattern: "/api/actions", handler: getActions },
+  { method: "POST", pattern: "/api/actions/:name", handler: startAction },
+  { method: "GET", pattern: "/api/platforms", handler: getPlatforms },
+  { method: "PUT", pattern: "/api/platforms/:name", handler: putPlatform },
   { method: "GET", pattern: "/api/applications", handler: listApplications },
   { method: "POST", pattern: "/api/applications", handler: addApplication },
   { method: "GET", pattern: "/api/applications/:id", handler: getApplication },

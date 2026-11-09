@@ -11,29 +11,27 @@
 import { join } from "node:path";
 import type { Command } from "commander";
 import {
+  AUTOMATION_WARNING,
   KNOWN_PLATFORMS,
+  applyPlatformChoice,
+  assertSavedLoginPossible,
+  confirmationMatches,
+  describePlatformChoice,
   findKnownPlatform,
+  isRiskyPlatformChoice,
+  latestSignIn,
   manualLogin,
   normalisePlatformName,
   resolveVault,
   type CredentialVault,
+  type PlatformChoice,
 } from "../../platforms/index.js";
-import {
-  ScoutError,
-  boardLevelSchema,
-  platformLoginSchema,
-  type BoardLevel,
-  type PlatformLogin,
-} from "../../shared/index.js";
+import { ScoutError, boardLevelSchema, platformLoginSchema } from "../../shared/index.js";
 import type { Application, ApplicationOptions } from "../application.js";
 import { LEVEL_NAMES } from "./apply-preparation.js";
 import { resolveApplyEnvironment, type ApplyEnvironment } from "./apply-environment.js";
 import { platformServices, type PlatformServices } from "./platform-services.js";
 import { withApplication } from "./with-application.js";
-
-/** The warning shown before a known sign-in platform is set to `saved` or `auto`. */
-const AUTOMATION_WARNING =
-  "Warning: automating this site (typing your password or submitting applications for you) may break its terms of use and could get your account restricted or closed. You are responsible for that risk. Manual sign-in and 'Fill, I submit' are the safe choices.";
 
 /** The options of `scout platforms set`. */
 interface SetOptions {
@@ -59,13 +57,6 @@ function describeTime(iso: string | undefined): string {
   return Number.isNaN(time.getTime()) ? "never" : iso.slice(0, 16).replace("T", " ");
 }
 
-/** The later of two ISO times, or `undefined` when neither exists. */
-function laterOf(first: string | undefined, second: string | undefined): string | undefined {
-  if (first === undefined) return second;
-  if (second === undefined) return first;
-  return first > second ? first : second;
-}
-
 /** Pads text on the right to a column width. */
 function column(text: string, width: number): string {
   return text.padEnd(width);
@@ -89,7 +80,7 @@ async function printPlatforms(application: Application, services: PlatformServic
     if (!services.vault.isSupported()) saved = "no keychain here";
     else if (username === undefined) saved = "no";
     else saved = (await services.vault.exists(name, username)) ? "yes" : "no";
-    const lastSignIn = laterOf(session?.lastManualLoginAt, session?.lastAutoLoginAt);
+    const lastSignIn = latestSignIn(session);
     rows.push([
       name,
       settings.platformLogins[name] ?? "manual",
@@ -116,14 +107,14 @@ async function printPlatforms(application: Application, services: PlatformServic
 }
 
 /** Parses `--login` and `--level` into validated values. Failure: `ScoutError("invalid-input")`. */
-function parseSetOptions(options: SetOptions): { login?: PlatformLogin; level?: BoardLevel } {
+function parseSetOptions(options: SetOptions): PlatformChoice {
   if (options.login === undefined && options.level === undefined) {
     throw new ScoutError(
       "invalid-input",
       "Nothing to change. Give --login manual|saved, --level prepare|fill|auto, or both.",
     );
   }
-  const parsed: { login?: PlatformLogin; level?: BoardLevel } = {};
+  const parsed: PlatformChoice = {};
   if (options.login !== undefined) {
     const login = platformLoginSchema.safeParse(options.login);
     if (!login.success) {
@@ -154,15 +145,14 @@ function parseSetOptions(options: SetOptions): { login?: PlatformLogin; level?: 
 async function confirmRisk(
   environment: ApplyEnvironment,
   platform: string,
-  choice: { login?: PlatformLogin; level?: BoardLevel },
+  choice: PlatformChoice,
 ): Promise<boolean> {
-  const risky = choice.login === "saved" || choice.level === "auto";
-  if (!risky || findKnownPlatform(platform) === undefined) return true;
+  if (!isRiskyPlatformChoice(platform, choice)) return true;
   console.log(AUTOMATION_WARNING);
   const answer = await environment.readLine(
     `Type the platform name (${platform}) to confirm, anything else cancels: `,
   );
-  if (answer.trim().toLowerCase() === platform) return true;
+  if (confirmationMatches(platform, answer)) return true;
   console.log("Not confirmed. Nothing was changed.");
   return false;
 }
@@ -177,35 +167,16 @@ async function runSet(
 ): Promise<void> {
   const platform = normalisePlatformName(platformText);
   const choice = parseSetOptions(options);
-  if (choice.login === "saved") {
-    if (findKnownPlatform(platform) === undefined) {
-      throw new ScoutError(
-        "invalid-input",
-        `Saved sign-in works only for linkedin, indeed and naukri, not "${platform}". Use --login manual.`,
-      );
-    }
-    if (!vault.isSupported()) {
-      throw new ScoutError(
-        "unavailable",
-        "Credentials cannot be saved on this computer (no keychain Scout knows), so --login saved is not possible. Manual sign-in still works.",
-      );
-    }
-  }
+  assertSavedLoginPossible(platform, choice, vault);
   if (!(await confirmRisk(environment, platform, choice))) return;
 
-  const settings = application.settingsStore.load();
-  const next = { ...settings };
-  if (choice.login !== undefined) {
-    next.platformLogins = { ...settings.platformLogins, [platform]: choice.login };
-  }
-  if (choice.level !== undefined) {
-    next.boardLevels = { ...settings.boardLevels, [platform]: choice.level };
-  }
-  application.settingsStore.save(next);
+  application.settingsStore.save(
+    applyPlatformChoice(application.settingsStore.load(), platform, choice),
+  );
   application.actionLog.append({
     actor: "platforms",
     action: "platform-settings-changed",
-    detail: `${platform}: login ${choice.login ?? "unchanged"}, level ${choice.level ?? "unchanged"}.`,
+    detail: describePlatformChoice(platform, choice),
   });
   if (choice.login !== undefined) console.log(`${platform}: sign-in way is now ${choice.login}.`);
   if (choice.level !== undefined) {

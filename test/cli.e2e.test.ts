@@ -263,7 +263,7 @@ describe("scout serve", () => {
       expect(url).toBeDefined();
       const health = await fetch(`${url}/api/health`);
       expect(health.status).toBe(200);
-      expect(await health.json()).toEqual({ ok: true });
+      expect(await health.json()).toMatchObject({ ok: true, approved: [] });
       const digest = await fetch(`${url}/api/digest`);
       expect(digest.status).toBe(200);
       const body = (await digest.json()) as {

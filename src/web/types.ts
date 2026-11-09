@@ -3,7 +3,10 @@
  * hands back. Everything the server touches is injected, so tests pass fakes and the real
  * program passes the real stores.
  */
+import type { HealthReport } from "../folders/index.js";
 import type { Ledger } from "../ledger/index.js";
+import type { CredentialVault, SessionStore } from "../platforms/index.js";
+import type { ActionRunner } from "./action-runner.js";
 import type {
   JobRecord,
   JobStore,
@@ -56,6 +59,17 @@ export interface PendingProposal {
   text: string;
 }
 
+/**
+ * What the platform routes need: where sign-in times are kept and the keychain. The routes only ask
+ * the keychain whether a credential exists; the password is never read, and never reaches the page.
+ */
+export interface PlatformControl {
+  sessions: SessionStore;
+  vault: CredentialVault;
+  /** Called after a platform setting changed, so the application can log it. Never given a secret. */
+  recordChange?: (detail: string) => void;
+}
+
 /** Everything the server needs from the rest of Scout. */
 export interface WebDependencies {
   profileStore: ProfileStore;
@@ -67,6 +81,14 @@ export interface WebDependencies {
   pendingProposals?: () => PendingProposal[];
   /** The application ledger behind the Applications tab. Left out, those routes answer 404. */
   ledger?: Ledger;
+  /** Runs "Find jobs now" and "Read inbox now". Left out, the action routes answer 404. */
+  actions?: ActionRunner;
+  /** The health facts the Control tab shows. Left out, `/api/health` answers only `{ ok: true }`. */
+  healthReport?: () => HealthReport;
+  /** The name of the model Scout uses, shown read-only on the Control tab. Left out, no model line. */
+  modelName?: string;
+  /** Sign-in way and apply level per platform. Left out, the platform routes answer 404. */
+  platforms?: PlatformControl;
   /** The clock; tests inject a fixed one. Defaults to the real time. */
   now?: () => Date;
 }
