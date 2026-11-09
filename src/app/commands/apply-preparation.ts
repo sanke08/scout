@@ -73,9 +73,30 @@ export function evidenceDirectoryFor(application: Application, job: JobRecord): 
 }
 
 /**
- * The PDF to upload. The job folder's tailored resume is used when the folders module saved one
- * (the `resume_tailored` line of `job.md` names a PDF that exists). Otherwise a resume is built from
- * the profile and the job's skills and compiled into `<data>/resumes/`.
+ * The tailored resume PDF the job's folder already holds (the `resume_tailored` line of `job.md`
+ * names a PDF that exists there), or `undefined` when there is none.
+ * Example: a folder whose `job.md` says `resume_tailored: Alex_Rivera_Acme.pdf` and holds that file
+ * gives its full path.
+ */
+export function findSavedResume(application: Application, job: JobRecord): string | undefined {
+  const folders = createJobFolderManager({
+    jobsDirectory: jobsFolderOf(application),
+    now: () => application.now(),
+  });
+  const folderName = folders.findJobFolder(job);
+  if (folderName === undefined) return undefined;
+  const saved = folders.readJob(folderName).fields["resume_tailored"];
+  if (saved === undefined || !saved.toLowerCase().endsWith(".pdf") || basename(saved) !== saved) {
+    return undefined;
+  }
+  const path = join(jobsFolderOf(application), folderName, saved);
+  return existsSync(path) ? path : undefined;
+}
+
+/**
+ * The PDF to upload. The job folder's tailored resume is used when the folders module saved one.
+ * Otherwise a resume is built from the profile and the job's skills and compiled into
+ * `<data>/resumes/`.
  * Failure: a missing `pdflatex` throws `ScoutError("unavailable")` whose message says so and what to
  * install; the command stops there and nothing has been opened or changed.
  */
@@ -85,18 +106,8 @@ export async function findOrBuildResume(
   job: JobRecord,
   profile: Profile,
 ): Promise<string> {
-  const folders = createJobFolderManager({
-    jobsDirectory: jobsFolderOf(application),
-    now: () => application.now(),
-  });
-  const folderName = folders.findJobFolder(job);
-  if (folderName !== undefined) {
-    const saved = folders.readJob(folderName).fields["resume_tailored"];
-    if (saved !== undefined && saved.toLowerCase().endsWith(".pdf") && basename(saved) === saved) {
-      const path = join(jobsFolderOf(application), folderName, saved);
-      if (existsSync(path)) return path;
-    }
-  }
+  const saved = findSavedResume(application, job);
+  if (saved !== undefined) return saved;
   const build = application.resumeBuilder.build(profile, job.skills, { company: job.company });
   const compiled = await environment.compileResume(
     build.texSource,

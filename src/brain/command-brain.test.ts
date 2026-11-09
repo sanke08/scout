@@ -48,12 +48,13 @@ describe("createCommandBrain", () => {
     expect(calls[0]?.input).toContain("score");
   });
 
-  it("uses the codex command and arguments for the codex engine", async () => {
+  it("always pins Sonnet 5.5 and turns tools off", async () => {
     const { runner, calls } = scriptedRunner([good(1)]);
-    await createCommandBrain({ engine: "codex", runner }).run(request);
-    expect(calls[0]?.command).toBe("codex");
-    expect(calls[0]?.args[0]).toBe("exec");
-    expect(ENGINE_CONFIGURATIONS.codex.command).toBe("codex");
+    await createCommandBrain({ engine: "claude", runner }).run(request);
+    const args = calls[0]?.args ?? [];
+    expect(args[args.indexOf("--model") + 1]).toBe("claude-sonnet-5-5");
+    expect(args).toContain("--tools");
+    expect(Object.keys(ENGINE_CONFIGURATIONS)).toEqual(["claude"]);
   });
 
   it("parses JSON wrapped in prose and a code fence", async () => {
@@ -116,7 +117,7 @@ describe("createCommandBrain", () => {
     const { runner } = scriptedRunner([
       { stdout: "You have hit your usage limit.", stderr: "", exitCode: 0 },
     ]);
-    const result = await createCommandBrain({ engine: "codex", runner }).run(request);
+    const result = await createCommandBrain({ engine: "claude", runner }).run(request);
     expect(result).toMatchObject({ ok: false, reason: "limit-reached" });
   });
 

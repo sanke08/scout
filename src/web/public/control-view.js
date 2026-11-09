@@ -1,30 +1,33 @@
 /* global setTimeout, clearTimeout */
 /**
- * The Control tab: what Scout is doing now, buttons to run "Find jobs now" and "Read inbox now",
- * the model in use, how each platform signs in, and the jobs approved and waiting for the terminal.
+ * The Control tab, the home of autopilot: Start and Stop, the live log of what the model is doing,
+ * the goals the model reads, Status, the platforms and the jobs approved and waiting for the terminal.
  *
  * What it never does: send a password (there is no password field; saving one needs the terminal's
- * keychain prompt), or submit an application (that stays `scout apply <id>` in the terminal).
- * Every word from the server goes into the page as text.
+ * keychain prompt), or submit an application by itself. Every word from the server, including the
+ * model's own log lines, goes into the page as text.
  */
-import { clearChildren, h } from "./dom.js";
+import { appendChildren, clearChildren, h } from "./dom.js";
 
-/** How often the page asks the server about a running action, in milliseconds. */
+/** How often the page asks the server about a running autopilot, in milliseconds. */
 const POLL_MILLISECONDS = 2000;
 
-/** The two actions, with the words shown for each. */
-const ACTIONS = [
-  [
-    "discover",
-    "Find jobs now",
-    "Reads your watched boards, applies your rules and shortlists the best.",
-  ],
-  [
-    "inbox",
-    "Read inbox now",
-    "Reads your mailbox (read-only) and updates the status of applications that got a reply.",
-  ],
+/** How close to the bottom (in pixels) the log counts as "following the newest line". */
+const FOLLOW_TOLERANCE = 24;
+
+/** The kinds of pass the owner can start: `[task, label]`. */
+const TASKS = [
+  ["hunt", "Find and shortlist jobs"],
+  ["inbox", "Read my inbox"],
+  ["followups", "Draft follow-ups"],
+  ["custom", "Custom (write it in the note)"],
 ];
+
+/** The word shown before each kind of log line, so the difference is never only colour or style. */
+const EVENT_LABELS = { text: "model", tool: "tool", result: "result", system: "system" };
+
+/** Words for how a run ended. */
+const OUTCOME_LABELS = { done: "Finished", stopped: "Stopped", failed: "Failed" };
 
 /** Labels for the login ways and apply levels. */
 const LOGIN_WAYS = [
@@ -60,11 +63,20 @@ function needsConfirmation(platform, change) {
   return platform.known && (change.login === "saved" || change.level === "auto");
 }
 
-/** Creates the Control view inside `root`; returns `{ load }`. `onPausedFacts(paused)` follows the health report. */
+/** Creates the Control view inside `root`; returns `{ load, refreshAfterPause }`. `onPausedFacts(paused)` follows the health report. */
 export function createControlView(root, context, onPausedFacts) {
   const state = {
     health: null,
-    actions: null,
+    /** The autopilot state from the server, or null when autopilot is not enabled. */
+    agent: null,
+    /** The goals from the server (`{ text, written }`), or null when not enabled. */
+    goals: null,
+    /** What the owner has typed and not yet started or saved. */
+    task: "hunt",
+    instruction: "",
+    goalsDraft: "",
+    goalsMessage: "",
+    starting: false,
     platforms: null,
     /** A risky change waiting for the typed name: `{ name, change }`. */
     pending: null,
@@ -73,6 +85,26 @@ export function createControlView(root, context, onPausedFacts) {
     loaded: false,
   };
   let pollTimer = null;
+  /** True while the log follows its newest line; false once the owner scrolls up. */
+  let followLog = true;
+  /** What the start box and the log showed last, so a poll redraws only what changed. */
+  let boxSignature = "";
+  let logSignature = "";
+  /** The two parts that change while a run goes. They live for the whole life of the view. */
+  const autopilotBox = h("div", { id: "autopilotBox" });
+  const logList = h("div", {
+    id: "autopilotLog",
+    class: "log",
+    role: "log",
+    "aria-label": "What autopilot is doing",
+    tabindex: "0",
+    on: {
+      scroll: () => {
+        const distance = logList.scrollHeight - logList.scrollTop - logList.clientHeight;
+        if (Number.isFinite(distance)) followLog = distance < FOLLOW_TOLERANCE;
+      },
+    },
+  });
 
   /** A line of terminal text with a Copy button. */
   function commandRow(command, label) {
@@ -131,7 +163,7 @@ export function createControlView(root, context, onPausedFacts) {
             { class: "lbl" },
             h("span", { class: "name" }, "Last activity"),
             report.heartbeatStale &&
-              h("p", {}, "Scout has not done anything for over a day. Run Find jobs now."),
+              h("p", {}, "Scout has not done anything for over a day. Start autopilot."),
           ),
           h("div", { class: "ctl" }, whenText(report.lastRunAt)),
         ),
@@ -167,69 +199,305 @@ export function createControlView(root, context, onPausedFacts) {
     );
   }
 
-  /** One action row: name, description, last result and the button. */
-  function actionRow([name, label, description], busyName) {
-    const last = state.actions.lastByName[name];
-    const paused = name === "inbox" && state.health?.report?.automationPaused === true;
-    const running = busyName === name;
+  /** True while the pause switch is on (read from the health report). */
+  function isPaused() {
+    return state.health?.report?.automationPaused === true;
+  }
+
+  /** True when the owner has written goals of their own; true when this server has no goals store. */
+  function goalsWritten() {
+    return state.goals === null || state.goals.written;
+  }
+
+  /** The reason Start is off, or null when it can be pressed. */
+  function startBlocker() {
+    if (state.agent.running) return "Autopilot is running. Press Stop to end it.";
+    if (state.starting) return "Starting.";
+    if (isPaused()) return "Automation is paused. Press Resume automation at the top to start.";
+    if (!goalsWritten()) return "Write your goals below and save them first.";
+    if (state.task === "custom" && state.instruction.trim() === "")
+      return "A custom pass needs a note: say what you want done.";
+    return null;
+  }
+
+  /** How long a finished run took, e.g. "4 min 10 s". */
+  function durationText(result) {
+    const seconds = Math.round(
+      (Date.parse(result.finishedAt) - Date.parse(result.startedAt)) / 1000,
+    );
+    if (!Number.isFinite(seconds) || seconds < 0) return "unknown time";
+    return seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
+  }
+
+  /** The last finished run: how it ended, the model's own summary, and the counts. */
+  function lastResultBlock() {
+    const last = state.agent.last;
+    if (!last) return h("p", { class: "note" }, "No run has finished yet.");
     return h(
       "div",
-      { class: "set", "data-action": name },
+      { class: "note-gap", id: "autopilotLast" },
+      h(
+        "p",
+        { class: last.outcome === "failed" ? "title failed" : "title" },
+        `${OUTCOME_LABELS[last.outcome] ?? last.outcome} ${whenText(last.finishedAt)}`,
+      ),
+      h("p", {}, last.summary),
+      h(
+        "p",
+        { class: "meta" },
+        `${last.task}, ${last.toolCalls} tool calls, ${last.turns} turns, ${durationText(last)}.`,
+      ),
+    );
+  }
+
+  /** Starts a run with the chosen task and note; a refusal shows its sentence. */
+  async function startAutopilot() {
+    state.starting = true;
+    drawAutopilotBox(true);
+    try {
+      state.agent = await context.api.startAgent(state.task, state.instruction.trim());
+      context.clearError();
+    } catch (error) {
+      context.showError(error.message);
+      const agent = await tryLoad(() => context.api.getAgent());
+      if (agent !== null) state.agent = agent;
+    }
+    state.starting = false;
+    drawAutopilot(true);
+    schedulePoll();
+  }
+
+  /** Stops the run; the sentence of a refusal, if any, is shown. */
+  async function stopAutopilot() {
+    try {
+      state.agent = await context.api.stopAgent();
+      context.clearError();
+    } catch (error) {
+      context.showError(error.message);
+    }
+    drawAutopilot(true);
+    schedulePoll();
+  }
+
+  /** The start controls: the big button, Stop, the reason, the kind of pass, the note and the last result. */
+  function drawAutopilotBox(force) {
+    const blocker = startBlocker();
+    const signature = JSON.stringify([
+      state.agent.running,
+      state.agent.task,
+      state.starting,
+      blocker,
+      state.agent.last?.finishedAt,
+    ]);
+    if (!force && signature === boxSignature) return;
+    boxSignature = signature;
+    clearChildren(autopilotBox);
+    const running = state.agent.running;
+    const runningText = `Running: ${state.agent.task ?? "a pass"}${
+      state.agent.startedAt ? `, started ${whenText(state.agent.startedAt)}` : ""
+    }. This page checks every 2 seconds.`;
+    appendChildren(autopilotBox, [
       h(
         "div",
-        { class: "lbl" },
-        h("span", { class: "name" }, label),
-        h("p", {}, description),
-        paused && h("p", {}, "Reading mail is off while automation is paused."),
-        running && h("p", { role: "status" }, "Running. This page checks every 2 seconds."),
-        !running &&
-          last &&
-          h(
-            "p",
-            { class: last.ok ? "" : "failed" },
-            `${last.ok ? "Finished" : "Failed"} ${whenText(last.finishedAt)}: ${last.summary}`,
-          ),
+        { class: "start-row" },
+        h(
+          "button",
+          {
+            class: "btn primary big",
+            type: "button",
+            id: "autopilotStart",
+            disabled: blocker !== null,
+            "aria-describedby": "autopilotReason",
+            on: { click: () => void startAutopilot() },
+          },
+          running ? "Autopilot is running" : "Start autopilot",
+        ),
+        h(
+          "button",
+          {
+            class: "btn big",
+            type: "button",
+            id: "autopilotStop",
+            disabled: !running,
+            on: { click: () => void stopAutopilot() },
+          },
+          "Stop",
+        ),
+      ),
+      h(
+        "p",
+        { class: "note", id: "autopilotReason", role: "status" },
+        running
+          ? runningText
+          : (blocker ?? "Ready. Scout's model decides the steps and uses Scout's tools."),
       ),
       h(
         "div",
-        { class: "ctl" },
+        { class: "pf start-options" },
+        h("label", { for: "autopilotTask" }, "What should it do?"),
+        h(
+          "select",
+          {
+            id: "autopilotTask",
+            class: "fld",
+            disabled: running,
+            on: {
+              change: (event) => {
+                state.task = event.target.value;
+                drawAutopilotBox(true);
+              },
+            },
+          },
+          TASKS.map(([value, label]) =>
+            h("option", { value, selected: value === state.task }, label),
+          ),
+        ),
+        h("label", { for: "autopilotNote" }, "Note for the model (optional)"),
+        h("textarea", {
+          id: "autopilotNote",
+          class: "fld",
+          rows: "2",
+          maxlength: "2000",
+          placeholder: "For example: only remote roles today.",
+          disabled: running,
+          value: state.instruction,
+          on: {
+            input: (event) => {
+              state.instruction = event.target.value;
+              const start = autopilotBox.querySelector('[id="autopilotStart"]');
+              if (start && state.task === "custom") start.disabled = startBlocker() !== null;
+            },
+          },
+        }),
+      ),
+      lastResultBlock(),
+    ]);
+  }
+
+  /** One line of the log. The model's words are shown as text, never as markup. */
+  function eventRow(event) {
+    const kind = EVENT_LABELS[event.kind] ? event.kind : "system";
+    const time = new Date(event.at);
+    return h(
+      "div",
+      { class: `ev ev-${kind}` },
+      h("span", { class: "when" }, Number.isNaN(time.getTime()) ? "" : time.toLocaleTimeString()),
+      h("span", { class: "kind" }, EVENT_LABELS[kind]),
+      h("span", { class: "what" }, event.summary),
+    );
+  }
+
+  /** The live log: newest at the bottom; follows it unless the owner scrolled up. */
+  function drawLog(force) {
+    const events = state.agent.events;
+    const signature = JSON.stringify([events.length, events[0]?.at, events.at(-1)?.at]);
+    if (!force && signature === logSignature) return;
+    logSignature = signature;
+    const keepTop = logList.scrollTop;
+    clearChildren(logList);
+    if (events.length === 0) {
+      logList.appendChild(
+        h("p", { class: "meta" }, "Nothing yet. The log fills in while autopilot runs."),
+      );
+    }
+    for (const event of events) logList.appendChild(eventRow(event));
+    logList.scrollTop = followLog ? logList.scrollHeight : keepTop;
+  }
+
+  /** Redraws the start box and the log (both only when they changed, unless forced). */
+  function drawAutopilot(force = false) {
+    if (state.agent === null) return;
+    drawAutopilotBox(force);
+    drawLog(force);
+  }
+
+  /** The Autopilot section; absent when the server has no autopilot. */
+  function autopilotSection() {
+    if (state.agent === null) return null;
+    drawAutopilot(true);
+    return h(
+      "section",
+      { id: "controlAutopilot" },
+      h("h2", {}, "Autopilot"),
+      h(
+        "p",
+        { class: "note" },
+        "Press Start and Scout's model does the whole job hunt with Scout's tools. You can watch it below and press Stop or Pause at any time.",
+      ),
+      autopilotBox,
+      h("h3", { class: "sub" }, "Live log"),
+      logList,
+    );
+  }
+
+  /** Saves the goals text; the server's sentence is shown when it refuses. */
+  async function saveGoals() {
+    try {
+      state.goals = await context.api.putGoals(state.goalsDraft);
+      state.goalsDraft = state.goals.text;
+      state.goalsMessage = state.goals.written
+        ? "Saved. Scout's model reads this at the start of every run."
+        : "Saved, but this is still the starter text. Replace it with your own words.";
+      context.clearError();
+    } catch (error) {
+      state.goalsMessage = "";
+      context.showError(error.message);
+    }
+    render();
+  }
+
+  /** The goals editor; absent when the server has no goals store. */
+  function goalsSection() {
+    if (state.goals === null) return null;
+    return h(
+      "section",
+      { id: "controlGoals" },
+      h("h2", {}, "Goals"),
+      h(
+        "p",
+        { class: "note" },
+        "Write what you want in your own words; Scout's model reads this every run.",
+      ),
+      h("label", { for: "goalsText", class: "small" }, "Your goals"),
+      h("textarea", {
+        id: "goalsText",
+        class: "fld goals",
+        rows: "10",
+        value: state.goalsDraft,
+        on: {
+          input: (event) => {
+            state.goalsDraft = event.target.value;
+          },
+        },
+      }),
+      h(
+        "div",
+        { class: "start-row" },
         h(
           "button",
           {
             class: "btn primary",
             type: "button",
-            id: `action-${name}`,
-            disabled: state.actions.running !== null || paused,
-            on: { click: () => void startAction(name) },
+            id: "goalsSave",
+            on: { click: () => void saveGoals() },
           },
-          running ? "Running…" : label,
+          "Save goals",
         ),
       ),
-    );
-  }
-
-  /** The two action rows; absent when the server has no action runner. */
-  function actionsSection() {
-    if (state.actions === null) return null;
-    const busyName = state.actions.running?.name ?? null;
-    return h(
-      "section",
-      { id: "controlActions" },
-      h("h2", {}, "Actions"),
       h(
-        "div",
-        { class: "group" },
-        ACTIONS.map((action) => actionRow(action, busyName)),
+        "p",
+        { class: "note", id: "goalsMessage", role: "status" },
+        state.goalsMessage ||
+          "The model decides what to look for and what to skip from this text. Scout applies no filter rules of its own.",
       ),
-      h("p", { class: "note" }, "Only one action runs at a time."),
     );
   }
 
-  /** One read-only line: the model and the calls used today. */
+  /** One read-only line: the model and how many turns the last run used. */
   function modelSection() {
-    const report = state.health?.report;
-    if (!report) return null;
-    const name = state.health.modelName;
+    if (state.agent === null) return null;
+    const name = state.health?.modelName ?? "Sonnet 5.5";
+    const last = state.agent.last;
     return h(
       "section",
       { id: "controlModel" },
@@ -237,7 +505,7 @@ export function createControlView(root, context, onPausedFacts) {
       h(
         "p",
         { class: "small" },
-        `${name ? `Model: ${name}. ` : ""}Model calls today: ${report.modelCallsToday} of ${report.modelCallBudget}.`,
+        `Model: ${name} (your own Claude login).${last ? ` Last run used ${last.turns} turns.` : ""}`,
       ),
     );
   }
@@ -435,14 +703,16 @@ export function createControlView(root, context, onPausedFacts) {
     clearChildren(root);
     if (!state.loaded) return;
     for (const section of [
+      autopilotSection(),
+      goalsSection(),
       statusSection(),
-      actionsSection(),
       modelSection(),
       platformsSection(),
       approvedSection(),
     ]) {
       if (section) root.appendChild(section);
     }
+    if (followLog) logList.scrollTop = logList.scrollHeight;
   }
 
   /** Reads one thing; a 404 (feature not enabled here) is not an error to show. */
@@ -455,56 +725,61 @@ export function createControlView(root, context, onPausedFacts) {
     }
   }
 
-  /** Keeps asking the server while an action runs, and stops when it is done. */
+  /** Keeps asking the server while autopilot runs, and stops when it is done. */
   function schedulePoll() {
     clearTimeout(pollTimer);
     pollTimer = null;
-    if (state.actions?.running == null) return;
+    if (!state.agent?.running) return;
     pollTimer = setTimeout(() => void poll(), POLL_MILLISECONDS);
   }
 
-  /** One poll: refresh the actions, and the health facts when the action has finished. */
+  /** One poll: refresh the autopilot state, and the health facts once the run has finished. */
   async function poll() {
     pollTimer = null;
-    const actions = await tryLoad(() => context.api.getActions());
-    if (actions !== null) state.actions = actions;
-    if (state.actions?.running == null) {
+    const agent = await tryLoad(() => context.api.getAgent());
+    if (agent !== null) state.agent = agent;
+    if (state.agent?.running) {
+      drawAutopilot();
+    } else {
       const health = await tryLoad(() => context.api.getHealth());
       if (health !== null) state.health = health;
+      render();
     }
-    render();
     schedulePoll();
   }
 
-  /** Starts an action; a refusal (another one running, paused, missing mail settings) shows its sentence. */
-  async function startAction(name) {
-    try {
-      state.actions = await context.api.startAction(name);
-      context.clearError();
-    } catch (error) {
-      context.showError(error.message);
-      const actions = await tryLoad(() => context.api.getActions());
-      if (actions !== null) state.actions = actions;
-    }
+  /**
+   * Called when the pause switch changed elsewhere (the header button or Settings). Pausing stops a
+   * running autopilot on the server, so the page asks again at once and shows the stop.
+   */
+  async function refreshAfterPause(paused) {
+    if (!state.loaded) return;
+    if (state.health?.report) state.health.report.automationPaused = paused;
+    const agent = await tryLoad(() => context.api.getAgent());
+    if (agent !== null) state.agent = agent;
     render();
     schedulePoll();
   }
 
   /** Fetches everything the tab shows, then draws. */
   async function load() {
-    const [health, actions, platforms] = await Promise.all([
+    const [health, agent, goals, platforms] = await Promise.all([
       tryLoad(() => context.api.getHealth()),
-      tryLoad(() => context.api.getActions()),
+      tryLoad(() => context.api.getAgent()),
+      tryLoad(() => context.api.getGoals()),
       tryLoad(() => context.api.getPlatforms()),
     ]);
     state.health = health;
-    state.actions = actions;
+    state.agent = agent;
     state.platforms = platforms;
+    const untouched = state.goals === null || state.goalsDraft === state.goals.text;
+    if (goals !== null && untouched) state.goalsDraft = goals.text;
+    state.goals = goals;
     state.loaded = true;
     if (health?.report) onPausedFacts(health.report.automationPaused);
     render();
     schedulePoll();
   }
 
-  return { load };
+  return { load, refreshAfterPause };
 }

@@ -29,7 +29,7 @@ import { assertNotPaused } from "../store/index.js";
 import type { BrowserDriver } from "./driver.js";
 import { saveEvidence } from "./evidence.js";
 import { fillAndVerify, type FillOutcome, type Mismatch } from "./fill-engine.js";
-import { detectPageBlocker, looksLikeConfirmation } from "./page-checks.js";
+import { confirmationIsNew, detectPageBlocker, looksLikeConfirmation } from "./page-checks.js";
 import type { Blocker, FillPlan } from "./plan.js";
 import { snapshotForm } from "./snapshot.js";
 
@@ -78,6 +78,17 @@ export interface RunArguments {
   profileVersion: number;
   /** Where to save evidence. Evidence is written before the submit marker; if saving fails nothing is submitted. */
   evidenceDirectory?: string;
+  /**
+   * Called once, right before the submit marker and the click, only when a submit is about to
+   * happen. It may throw (for example `ScoutError("paused")` when the kill switch was turned on
+   * while the form was being filled); the error leaves `runApplication` and nothing is submitted.
+   */
+  beforeSubmit?: () => void;
+  /**
+   * When true, a confirmation counts only if its wording was not already on the page before the
+   * click (a banner on a re-opened form never counts). Unattended runs set it; default false.
+   */
+  requireNewConfirmation?: boolean;
 }
 
 /** The result of one run. */
@@ -315,6 +326,9 @@ async function submitOnce(
   if (submit === undefined) {
     throw new ScoutError("unsafe", "The plan has no submit button, so Scout refuses to submit.");
   }
+  args.beforeSubmit?.();
+  const textBeforeSubmit =
+    args.requireNewConfirmation === true ? await readTextQuietly(driver) : "";
   jobs.transition(
     jobId,
     "submitting",
@@ -339,7 +353,11 @@ async function submitOnce(
   }
 
   const finishedAt = args.now().toISOString();
-  const confirmed = confirmationText !== undefined && looksLikeConfirmation(confirmationText);
+  const confirmed =
+    confirmationText !== undefined &&
+    (args.requireNewConfirmation === true
+      ? confirmationIsNew(textBeforeSubmit, confirmationText)
+      : looksLikeConfirmation(confirmationText));
   const afterBlocker =
     confirmationText !== undefined && !confirmed
       ? detectPageBlocker(confirmationText, "")
@@ -381,6 +399,15 @@ async function submitOnce(
   jobs.transition(jobId, "unverified", reason);
   saveEvidenceIfAsked(args, { ...finalEvidence, ...extraEvidence });
   return result(jobs, jobId, "unverified", reason, extra);
+}
+
+/** The page text before the click, or an empty text when the page cannot be read (then any confirmation is new). */
+async function readTextQuietly(driver: BrowserDriver): Promise<string> {
+  try {
+    return await driver.readConfirmation();
+  } catch {
+    return "";
+  }
 }
 
 /** Saves the final evidence when a folder was given. A failure here does not undo the submit result. */

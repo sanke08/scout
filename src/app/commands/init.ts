@@ -59,9 +59,13 @@ export function registerInit(program: Command, overrides: ApplicationOptions): v
         console.log("Next steps:");
         console.log("  1. Edit profile.json (or run `scout serve` and use the Profile page).");
         console.log("  2. scout profile validate");
-        console.log("  3. scout boards add greenhouse <company-token>");
-        console.log("  4. scout discover");
-        console.log("  5. scout digest   (or `scout serve` for the Digest page)");
+        console.log(
+          "  3. Write your goals in your own words: what jobs, where, pay, what to avoid (scout agent goals --edit FILE, or the Control page).",
+        );
+        console.log(
+          "  4. scout agent run   (autopilot: the model does the hunt with Scout's tools)",
+        );
+        console.log("  5. scout serve   (the web page: Control, Digest, Applications)");
       }),
     );
 }

@@ -10,7 +10,7 @@ The model bridge: Claude Code and Codex behind one `Brain` interface, schema-che
 
 ## What it is
 
-Scout asks a model for data (scores, proposed wordings) by running the `claude` or `codex` command on the user's own subscription. This module builds the prompt, runs the command, finds the JSON in the reply, checks it against a zod schema, retries once if it is wrong, and returns either a value or a failure value. It never throws for model problems and the model never acts: it only returns data.
+Scout asks a model for data (scores, proposed wordings) by running the `claude` command (always Sonnet 5.5, D-013) on the user's own subscription. This module builds the prompt, runs the command, finds the JSON in the reply, checks it against a zod schema, retries once if it is wrong, and returns either a value or a failure value. It never throws for model problems and the model never acts: it only returns data.
 
 ## Public interface
 
@@ -25,7 +25,6 @@ import {
 
 const router = createBrainRouter({
   primary: createCommandBrain({ engine: "claude" }),
-  fallback: createCommandBrain({ engine: "codex" }),
   budget: createDailyBudget({ limitPerDay: 40 }),
   cache: createFileCache(`${dataDirectory}/brain-cache`),
   profileVersion: profile.version,
@@ -61,22 +60,14 @@ Rules the module keeps:
 - The budget counts real engine calls per request. Cache hits cost nothing; a call that ended in a limit or "unavailable" is given back.
 - The limit memory of a command brain and the in-memory budget and cache live for one process. Use the file-backed budget and cache for state that must last between runs.
 
-## Assumed command-line flags (the owner must verify)
+## Command-line flags
 
-The exact flags of the Claude Code and Codex tools are **ASSUMPTIONS**, written from memory of how those tools are documented, and all of them live in one object, `ENGINE_CONFIGURATIONS` in `engines.ts`. Run each tool by hand and confirm before relying on them:
-
-- Claude Code: `claude -p <prompt>` prints the reply as plain text and exits.
-- Codex: `codex exec --sandbox read-only --skip-git-repo-check <prompt>` runs one prompt and exits.
-- The wording of "usage limit" and reset-time messages (`limit-detection.ts`) is also an assumption.
-- The prompt is passed as one command-line argument, which can hit the operating system's argument length limit for very large batches; the runner already accepts standard input, so a switch is a small change.
-- Nothing here switches off the tools' own abilities to read or edit files; check the tools' options for that and add the flag in `engines.ts` if needed.
-
-If a flag is wrong, the tool exits with an error and Scout reports "unavailable"; pass `configuration` to `createCommandBrain` to change the command or flags without editing this module.
+All flags live in one object, `ENGINE_CONFIGURATIONS` in `engines.ts`, and were checked against the installed `claude` (D-013): `-p --model claude-sonnet-5-5 --tools "" --no-session-persistence`, the prompt on standard input. Codex and engine switching were removed. The wording of "usage limit" and reset-time messages (`limit-detection.ts`) is an assumption. If a flag is wrong, the tool exits with an error and Scout reports "unavailable"; pass `configuration` to `createCommandBrain` to change the command or flags without editing this module.
 
 ## Glossary
 
 - **Brain:** the port in `src/shared/ports.ts`; `run(request)` returns a `BrainResult`.
-- **Engine:** one model program, `claude` or `codex`.
+- **Engine:** the one model program, `claude`, always run with `--model claude-sonnet-5-5`.
 - **Failure value:** `{ ok: false, reason, message, resetAt? }`; how every model problem is reported.
 - **Untrusted text:** text from outside Scout (a posting, an email). Data, never instructions.
 - **Runner:** the function that starts an engine program; replaced by a fake in tests.
@@ -92,4 +83,4 @@ If a flag is wrong, the tool exits with an error and Scout reports "unavailable"
 npx vitest run src/brain
 ```
 
-or `npm run check` for everything. No test uses the network, a real model or the real `claude` or `codex` program; the real process runner is tested against the Node program itself.
+or `npm run check` for everything. No test uses the network, a real model or the real `claude` program; the real process runner is tested against the Node program itself.

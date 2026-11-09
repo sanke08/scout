@@ -667,6 +667,59 @@ describe("instant saves", () => {
   });
 });
 
+describe("settings view", () => {
+  interface SettingsModule {
+    createSettingsView: (
+      root: FakeNode,
+      context: unknown,
+      onChanged: (settings: unknown) => void,
+    ) => { load: () => Promise<void> };
+  }
+
+  async function open() {
+    const { createSettingsView } = await loadModule<SettingsModule>("settings-view.js");
+    const stored = { ...DEFAULT_SETTINGS };
+    const sent: Record<string, unknown>[] = [];
+    const api = {
+      getSettings: async () => ({ settings: { ...stored }, defaults: { ...DEFAULT_SETTINGS } }),
+      putSettings: async (settings: Record<string, unknown>) => {
+        sent.push(settings);
+        Object.assign(stored, settings);
+        return { settings: { ...stored } };
+      },
+    };
+    const root = new FakeNode();
+    const view = createSettingsView(
+      root,
+      { api, showError: () => undefined, clearError: () => undefined },
+      () => undefined,
+    );
+    await view.load();
+    const byId = (id: string) => root.findAll((node) => node.attributes.get("id") === id)[0];
+    return { root, sent, byId };
+  }
+
+  it("no longer offers the engine, switch-on-limit or daily model budget", async () => {
+    const { byId, root } = await open();
+    for (const id of ["mainEngine", "switchEngineOnLimit", "dailyModelCallBudget"]) {
+      expect(byId(id)).toBeUndefined();
+    }
+    expect(root.textContent).not.toContain("Codex");
+    expect(root.textContent).not.toContain("Main engine");
+  });
+
+  it("offers max turns and max minutes with their limits, and saves a change", async () => {
+    const { byId, sent } = await open();
+    expect(byId("agentMaxTurns")?.attributes.get("min")).toBe("1");
+    expect(byId("agentMaxTurns")?.attributes.get("max")).toBe("200");
+    expect(byId("agentMaxMinutes")?.attributes.get("min")).toBe("1");
+    expect(byId("agentMaxMinutes")?.attributes.get("max")).toBe("240");
+    byId("agentMaxTurns")?.fire("change", { target: { value: "80" } });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(sent[0]).toMatchObject({ agentMaxTurns: 80 });
+  });
+});
+
 describe("pause control", () => {
   interface PauseModule {
     createPauseControl: (
@@ -735,11 +788,11 @@ describe("control view", () => {
       root: FakeNode,
       context: unknown,
       onPaused: (paused: boolean) => void,
-    ) => { load: () => Promise<void> };
+    ) => { load: () => Promise<void>; refreshAfterPause: (paused: boolean) => Promise<void> };
   }
 
   const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-  const NO_RUN = { running: null, last: null, lastByName: {} };
+  const IDLE = { running: false, events: [] as unknown[] } as Record<string, unknown>;
 
   function platform(name: string, known = true) {
     return {
@@ -773,7 +826,8 @@ describe("control view", () => {
         approved: [{ id: "job-9", company: "ExampleCorp", title: "Backend Engineer" }],
         modelName: "Sonnet 5.5",
       } as Record<string, unknown>,
-      actions: { ...NO_RUN } as Record<string, unknown>,
+      agent: { ...IDLE } as Record<string, unknown>,
+      goals: { text: "Backend roles, remote in Europe.", written: true } as Record<string, unknown>,
       platforms: {
         platforms: [platform("indeed"), platform("linkedin"), platform("naukri")],
         keychainAvailable: true,
@@ -782,18 +836,30 @@ describe("control view", () => {
     };
     const api = {
       getHealth: async () => data.health,
-      getActions: async () => {
-        calls.push("getActions");
-        return data.actions;
+      getAgent: async () => {
+        calls.push("getAgent");
+        return data.agent;
       },
-      startAction: async (name: string) => {
-        calls.push(`start ${name}`);
-        data.actions = {
-          running: { name, startedAt: "2026-11-09T09:00:00.000Z" },
-          last: null,
-          lastByName: {},
+      startAgent: async (task: string, instruction?: string) => {
+        calls.push(`start ${task} ${instruction ?? ""}`.trim());
+        data.agent = {
+          running: true,
+          task,
+          startedAt: "2026-11-09T09:00:00.000Z",
+          events: [{ at: "2026-11-09T09:00:00.000Z", kind: "system", summary: "Started." }],
         };
-        return data.actions;
+        return data.agent;
+      },
+      stopAgent: async () => {
+        calls.push("stop");
+        data.agent = { ...data.agent, running: false };
+        return data.agent;
+      },
+      getGoals: async () => data.goals,
+      putGoals: async (text: string) => {
+        calls.push(`putGoals ${text}`);
+        data.goals = { text, written: text.trim() !== "" && !text.startsWith("Write here") };
+        return data.goals;
       },
       getPlatforms: async () => data.platforms,
       putPlatform: async (name: string, body: Record<string, unknown>) => {
@@ -826,74 +892,229 @@ describe("control view", () => {
   const byId = (root: FakeNode, id: string): FakeNode =>
     root.findAll((node) => node.attributes.get("id") === id)[0]!;
 
+  const disabled = (root: FakeNode, id: string): boolean =>
+    byId(root, id).attributes.has("disabled");
+
+  const RESULT = {
+    task: "hunt",
+    startedAt: "2026-11-09T09:00:00.000Z",
+    finishedAt: "2026-11-09T09:04:10.000Z",
+    outcome: "done",
+    summary: "Shortlisted 2 roles at ExampleCorp.",
+    toolCalls: 31,
+    turns: 12,
+  };
+
   it("shows the status, the one-line model, and the approved job with its terminal command", async () => {
-    const { root, paused } = await open();
+    const fake = fakeApi();
+    fake.data.agent = { running: false, events: [], last: RESULT };
+    const { root, paused } = await open(fake);
     expect(root.textContent).toContain("Running");
     expect(root.textContent).toContain("found 3");
     expect(root.textContent).not.toContain("applied 0");
     expect(root.textContent).toContain("ExampleCorp, Role: A code is needed");
-    expect(root.textContent).toContain("Model: Sonnet 5.5. Model calls today: 7 of 40.");
+    expect(root.textContent).toContain(
+      "Model: Sonnet 5.5 (your own Claude login). Last run used 12 turns.",
+    );
+    expect(root.textContent).not.toContain("Model calls today");
     expect(root.textContent).toContain("scout apply job-9");
     expect(paused).toEqual([false]);
   });
 
-  it("disables both actions while one runs and polls only until it finishes", async () => {
+  it("replaces the old action buttons with autopilot", async () => {
+    const { root } = await open();
+    expect(root.textContent).not.toContain("Find jobs now");
+    expect(root.textContent).not.toContain("Read inbox now");
+    expect(byId(root, "autopilotStart").textContent).toBe("Start autopilot");
+    const tasks = byId(root, "autopilotTask")
+      .findAll((node) => node.tagName === "option")
+      .map((node) => (node as unknown as { value: string }).value);
+    expect(tasks).toEqual(["hunt", "inbox", "followups", "custom"]);
+  });
+
+  it("starts the chosen pass with the note, then disables Start, enables Stop and polls until it ends", async () => {
     vi.useFakeTimers();
     try {
       const fake = fakeApi();
       const { root } = await open(fake);
-      expect(byId(root, "action-discover").attributes.has("disabled")).toBe(false);
-      byId(root, "action-discover").click();
+      expect(disabled(root, "autopilotStart")).toBe(false);
+      expect(disabled(root, "autopilotStop")).toBe(true);
+      byId(root, "autopilotNote").fire("input", { target: { value: "Only remote today." } });
+      byId(root, "autopilotTask").fire("change", { target: { value: "inbox" } });
+      byId(root, "autopilotStart").click();
       await vi.advanceTimersByTimeAsync(0);
-      expect(fake.calls).toContain("start discover");
-      expect(byId(root, "action-discover").attributes.has("disabled")).toBe(true);
-      expect(byId(root, "action-inbox").attributes.has("disabled")).toBe(true);
+      expect(fake.calls).toContain("start inbox Only remote today.");
+      expect(disabled(root, "autopilotStart")).toBe(true);
+      expect(disabled(root, "autopilotStop")).toBe(false);
+      expect(root.textContent).toContain("Started.");
+      expect(byId(root, "autopilotReason").textContent).toContain("Running");
 
-      const before = fake.calls.filter((call) => call === "getActions").length;
+      const before = fake.calls.filter((call) => call === "getAgent").length;
       await vi.advanceTimersByTimeAsync(2000);
-      expect(fake.calls.filter((call) => call === "getActions").length).toBe(before + 1);
+      expect(fake.calls.filter((call) => call === "getAgent").length).toBe(before + 1);
 
-      fake.data.actions = {
-        running: null,
-        last: null,
-        lastByName: {
-          discover: {
-            name: "discover",
-            ok: false,
-            summary: "There is no profile yet.",
-            startedAt: "2026-11-09T09:00:00.000Z",
-            finishedAt: "2026-11-09T09:00:05.000Z",
-          },
-        },
-      };
+      fake.data.agent = { running: false, events: [], last: RESULT };
       await vi.advanceTimersByTimeAsync(2000);
-      expect(root.textContent).toContain("Failed");
-      expect(root.textContent).toContain("There is no profile yet.");
-      expect(byId(root, "action-discover").attributes.has("disabled")).toBe(false);
-      const after = fake.calls.filter((call) => call === "getActions").length;
+      expect(root.textContent).toContain("Finished");
+      expect(root.textContent).toContain("Shortlisted 2 roles at ExampleCorp.");
+      expect(root.textContent).toContain("hunt, 31 tool calls, 12 turns, 4 min 10 s.");
+      expect(disabled(root, "autopilotStart")).toBe(false);
+      const after = fake.calls.filter((call) => call === "getAgent").length;
       await vi.advanceTimersByTimeAsync(10000);
-      expect(fake.calls.filter((call) => call === "getActions").length).toBe(after);
+      expect(fake.calls.filter((call) => call === "getAgent").length).toBe(after);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("turns the inbox button off while paused and shows a refusal sentence", async () => {
+  it("stops a running autopilot with the Stop button", async () => {
     const fake = fakeApi();
-    (fake.data.health["report"] as Record<string, unknown>)["automationPaused"] = true;
+    fake.data.agent = { running: true, task: "hunt", events: [] };
     const { root } = await open(fake);
-    expect(byId(root, "action-inbox").attributes.has("disabled")).toBe(true);
-    expect(root.textContent).toContain("Reading mail is off while automation is paused.");
+    expect(disabled(root, "autopilotStart")).toBe(true);
+    byId(root, "autopilotStop").click();
+    await settle();
+    expect(fake.calls).toContain("stop");
+    expect(disabled(root, "autopilotStart")).toBe(false);
+    expect(disabled(root, "autopilotStop")).toBe(true);
+  });
 
+  it("keeps Start off with the reason shown: paused, goals not written, custom without a note", async () => {
+    const paused = fakeApi();
+    (paused.data.health["report"] as Record<string, unknown>)["automationPaused"] = true;
+    const first = await open(paused);
+    expect(disabled(first.root, "autopilotStart")).toBe(true);
+    expect(byId(first.root, "autopilotReason").textContent).toContain("paused");
+
+    const starter = fakeApi();
+    starter.data.goals = { text: "Write here, in your own words", written: false };
+    const second = await open(starter);
+    expect(disabled(second.root, "autopilotStart")).toBe(true);
+    expect(byId(second.root, "autopilotReason").textContent).toContain("goals");
+
+    const custom = await open();
+    byId(custom.root, "autopilotTask").fire("change", { target: { value: "custom" } });
+    expect(disabled(custom.root, "autopilotStart")).toBe(true);
+    expect(byId(custom.root, "autopilotReason").textContent).toContain("note");
+    byId(custom.root, "autopilotNote").fire("input", { target: { value: "Tidy up." } });
+    // In a browser the `disabled` property also drives the attribute; the fake only stores the property.
+    expect((byId(custom.root, "autopilotStart") as unknown as { disabled: unknown }).disabled).toBe(
+      false,
+    );
+  });
+
+  it("shows a refusal sentence from the server", async () => {
     const refused = fakeApi({
-      startAction: async () => {
-        throw new Error("Another action is still running. Wait for it to finish.");
+      startAgent: async () => {
+        throw new Error("Autopilot is already running. Stop it first, or wait for it to finish.");
       },
     });
     const view = await open(refused);
-    byId(view.root, "action-discover").click();
+    byId(view.root, "autopilotStart").click();
     await settle();
-    expect(view.errors).toEqual(["Another action is still running. Wait for it to finish."]);
+    expect(view.errors).toEqual([
+      "Autopilot is already running. Stop it first, or wait for it to finish.",
+    ]);
+  });
+
+  it("draws the log with distinct kinds, newest last, and the model's words as text", async () => {
+    const hostile = "<img src=x onerror=alert(1)><script>alert(2)</script>";
+    const fake = fakeApi();
+    fake.data.agent = {
+      running: true,
+      task: "hunt",
+      events: [
+        { at: "2026-11-09T09:00:00.000Z", kind: "system", summary: "Started." },
+        { at: "2026-11-09T09:00:01.000Z", kind: "text", summary: hostile },
+        { at: "2026-11-09T09:00:02.000Z", kind: "tool", summary: "search_jobs" },
+        { at: "2026-11-09T09:00:03.000Z", kind: "result", summary: "3 postings" },
+      ],
+    };
+    const { root } = await open(fake);
+    const log = byId(root, "autopilotLog");
+    expect(log.attributes.get("role")).toBe("log");
+    const rows = log.findAll((node) => node.className.startsWith("ev "));
+    expect(rows.map((row) => row.className)).toEqual([
+      "ev ev-system",
+      "ev ev-text",
+      "ev ev-tool",
+      "ev ev-result",
+    ]);
+    expect(rows[3]?.textContent).toContain("3 postings");
+    expect(log.textContent).toContain(hostile);
+    expect(root.elements.some((node) => node.tagName === "img" || node.tagName === "script")).toBe(
+      false,
+    );
+  });
+
+  it("follows the newest line unless the owner scrolled up", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = fakeApi();
+      const event = (second: number) => ({
+        at: `2026-11-09T09:00:0${second}.000Z`,
+        kind: "text",
+        summary: `line ${second}`,
+      });
+      fake.data.agent = { running: true, task: "hunt", events: [event(1)] };
+      const { root } = await open(fake);
+      const log = byId(root, "autopilotLog") as unknown as Record<string, number>;
+      Object.assign(log, { scrollHeight: 500, clientHeight: 100, scrollTop: 0 });
+      fake.data.agent = { running: true, task: "hunt", events: [event(1), event(2)] };
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(log["scrollTop"]).toBe(500);
+
+      // The owner scrolls up: the next line must not pull the log down.
+      log["scrollTop"] = 40;
+      byId(root, "autopilotLog").fire("scroll", {});
+      fake.data.agent = { running: true, task: "hunt", events: [event(1), event(2), event(3)] };
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(log["scrollTop"]).toBe(40);
+      expect(root.textContent).toContain("line 3");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("saves the goals, shows the plain explanation and then allows Start", async () => {
+    const fake = fakeApi();
+    fake.data.goals = { text: "Write here, in your own words", written: false };
+    const { root } = await open(fake);
+    expect(root.textContent).toContain(
+      "Write what you want in your own words; Scout's model reads this every run.",
+    );
+    expect(root.textContent).toContain("The model decides");
+    expect(disabled(root, "autopilotStart")).toBe(true);
+    byId(root, "goalsText").fire("input", { target: { value: "Platform roles in Berlin." } });
+    byId(root, "goalsSave").click();
+    await settle();
+    expect(fake.calls).toContain("putGoals Platform roles in Berlin.");
+    expect(byId(root, "goalsMessage").textContent).toContain("Saved.");
+    expect(disabled(root, "autopilotStart")).toBe(false);
+  });
+
+  it("shows the server's sentence when the goals are refused", async () => {
+    const view = await open(
+      fakeApi({
+        putGoals: async () => {
+          throw new Error("The goals text is longer than 20000 characters. Shorten it.");
+        },
+      }),
+    );
+    byId(view.root, "goalsSave").click();
+    await settle();
+    expect(view.errors).toEqual(["The goals text is longer than 20000 characters. Shorten it."]);
+  });
+
+  it("shows a stopped run at once when automation is paused elsewhere", async () => {
+    const fake = fakeApi();
+    fake.data.agent = { running: true, task: "hunt", events: [] };
+    const { root, view } = await open(fake);
+    expect(disabled(root, "autopilotStop")).toBe(false);
+    fake.data.agent = { running: false, events: [] };
+    await view.refreshAfterPause(true);
+    expect(disabled(root, "autopilotStop")).toBe(true);
+    expect(byId(root, "autopilotReason").textContent).toContain("paused");
   });
 
   it("saves a safe platform change at once", async () => {
@@ -948,8 +1169,11 @@ describe("control view", () => {
 
   it("leaves out a section the server does not provide", async () => {
     const fake = fakeApi({
-      getActions: async () => {
-        throw new Error("Actions are not enabled.");
+      getAgent: async () => {
+        throw new Error("Autopilot is not enabled.");
+      },
+      getGoals: async () => {
+        throw new Error("Autopilot is not enabled.");
       },
       getPlatforms: async () => {
         throw new Error("Platform settings are not enabled.");
@@ -957,7 +1181,8 @@ describe("control view", () => {
     });
     const { root, errors } = await open(fake);
     expect(errors).toEqual([]);
-    expect(root.textContent).not.toContain("Find jobs now");
+    expect(root.textContent).not.toContain("Start autopilot");
+    expect(root.textContent).not.toContain("Goals");
     expect(root.textContent).not.toContain("Platforms");
   });
 });

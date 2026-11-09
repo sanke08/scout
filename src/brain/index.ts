@@ -13,7 +13,7 @@ export { extractFirstJson, type JsonFind } from "./json-extract.js";
 export {
   ENGINE_CONFIGURATIONS,
   buildClaudeArguments,
-  buildCodexArguments,
+  MODEL_NAME,
   type EngineConfiguration,
   type EngineName,
 } from "./engines.js";

@@ -18,9 +18,7 @@ import { join, resolve } from "node:path";
 import {
   detectPageBlocker,
   confirmationIsNew,
-  mapFields,
   mayAutoSubmit,
-  planApplication,
   runApplication,
   saveEvidence,
   snapshotForm,
@@ -28,16 +26,20 @@ import {
   type FillPlan,
   type RunResult,
 } from "../../apply/index.js";
-import {
-  autoLogin,
-  findKnownPlatform,
-  platformForUrl,
-  type CredentialVault,
-} from "../../platforms/index.js";
+import type { CredentialVault } from "../../platforms/index.js";
 import { ScoutError, type JobRecord, type Profile, type Settings } from "../../shared/index.js";
 import type { Application } from "../application.js";
 import { createBoardRunStore, type BoardRunStore } from "../board-runs-store.js";
 import type { ApplyEnvironment } from "./apply-environment.js";
+import {
+  closeQuietly,
+  keepOpen,
+  mapForm,
+  planForm,
+  platformOfAddress,
+  refusingDriver,
+  trySavedSignIn,
+} from "./apply-core.js";
 import { platformServices, type PlatformServices } from "./platform-services.js";
 import {
   LEVEL_NAMES,
@@ -162,59 +164,8 @@ function detailOf(error: unknown): string {
 /** Reads the form into a plan: snapshot, mapping with the answer bank, then planning. */
 function buildPlan(html: string, context: ApplyContext): FillPlan {
   const snapshot = snapshotForm(html);
-  const mappings = mapFields(
-    snapshot,
-    context.profile,
-    context.profile.answerBank,
-    context.settings,
-  );
-  return planApplication({
-    url: context.url,
-    snapshot,
-    mappings,
-    resumeFilePath: context.resumeFile,
-  });
-}
-
-/** A driver that refuses every call. Level Prepare passes it so a bug could never open a page. */
-function refusingDriver(): BrowserDriver {
-  const refuse = async (): Promise<never> => {
-    throw new ScoutError(
-      "unsafe",
-      "A browser was used at level Prepare only, which must never open a page.",
-    );
-  };
-  return {
-    open: refuse,
-    currentUrl: refuse,
-    pageText: refuse,
-    pageHtml: refuse,
-    fill: refuse,
-    select: refuse,
-    upload: refuse,
-    readValue: refuse,
-    screenshot: refuse,
-    submit: refuse,
-    readConfirmation: refuse,
-    close: async () => {},
-  };
-}
-
-/**
- * The same driver with `close` doing nothing, so the window stays open after `runApplication`
- * (which closes its driver) and the user can press submit. The command closes the real one.
- */
-function keepOpen(driver: BrowserDriver): BrowserDriver {
-  return { ...driver, close: async () => {} };
-}
-
-/** Closes a driver, ignoring a failure: the result of the run is already decided. */
-async function closeQuietly(driver: BrowserDriver): Promise<void> {
-  try {
-    await driver.close();
-  } catch {
-    // The window may already be gone.
-  }
+  const mappings = mapForm(snapshot, context.profile, context.settings);
+  return planForm(context.url, snapshot, mappings, context.resumeFile);
 }
 
 /** Prints what a finished run did, in the module's own words. */
@@ -273,11 +224,7 @@ async function stageOnly(context: ApplyContext): Promise<void> {
 
 /** The platform of the page being applied to, or `undefined` when the address cannot be read. */
 function platformOfRun(context: ApplyContext): string | undefined {
-  try {
-    return platformForUrl(context.url);
-  } catch {
-    return undefined;
-  }
+  return platformOfAddress(context.url);
 }
 
 /** A page that needs the user (or is closed): record it, say so, and for a sign-in wall keep the window open. */
@@ -306,47 +253,20 @@ async function stopForPage(
   }
 }
 
-/**
- * At a sign-in wall, signs in by itself when (and only when) the user chose "saved" for this
- * platform and credentials exist. One attempt per run, no retry. Returns a note for the user
- * when the attempt was made and did not work, and `signedIn` when the page should be read again.
- */
-async function trySavedSignIn(
+/** The saved sign-in of the shared core, with the command's own printing. */
+function trySavedSignInHere(
   context: ApplyContext,
   driver: BrowserDriver,
 ): Promise<{ signedIn: boolean; note?: string }> {
-  const platform = platformOfRun(context);
-  if (platform === undefined || findKnownPlatform(platform) === undefined) {
-    return { signedIn: false };
-  }
-  if (context.settings.platformLogins[platform] !== "saved") return { signedIn: false };
-  const username = context.platforms.sessions.get(platform)?.username;
-  if (username === undefined || !(await context.platforms.vault.exists(platform, username))) {
-    return {
-      signedIn: false,
-      note: `${platform} is set to saved sign-in, but no credentials are stored. Store them with \`scout login ${platform} --save\`.`,
-    };
-  }
-  context.application.assertNotPaused();
-  console.log(
-    `The page needs a sign-in; signing in to ${platform} with the saved credentials (once).`,
-  );
-  const result = await autoLogin(
+  return trySavedSignIn({
+    application: context.application,
+    settings: context.settings,
+    platforms: context.platforms,
     driver,
-    platform,
-    context.platforms.vault,
-    context.platforms.context,
-  );
-  context.application.actionLog.append({
-    actor: "platforms",
-    action: "auto-login",
+    url: context.url,
     jobId: context.job.id,
-    detail: result.signedIn
-      ? `Signed in to ${platform} with the saved credentials.`
-      : `Automatic sign-in to ${platform} stopped: ${result.reason}`,
+    say: (line) => console.log(line),
   });
-  if (result.signedIn) return { signedIn: true };
-  return { signedIn: false, note: result.reason };
 }
 
 /**
@@ -515,7 +435,7 @@ async function applyWithDriver(context: ApplyContext, driver: BrowserDriver): Pr
   let blocker = detectPageBlocker(pageText, pageHtml);
   let signInNote: string | undefined;
   if (blocker?.kind === "login") {
-    const attempt = await trySavedSignIn(context, driver);
+    const attempt = await trySavedSignInHere(context, driver);
     signInNote = attempt.note;
     if (attempt.signedIn) {
       ({ pageText, pageHtml } = await readApplicationPage(context, driver));

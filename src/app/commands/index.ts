@@ -1,6 +1,7 @@
 /** Registers every command on the program. The only file `src/index.ts` needs from this folder. */
 import type { Command } from "commander";
 import type { ApplicationOptions } from "../application.js";
+import { registerAgent } from "./agent.js";
 import { registerApplications } from "./applications.js";
 import { registerBoards } from "./boards.js";
 import { registerDiscover } from "./discover.js";
@@ -13,7 +14,7 @@ import { registerServe } from "./serve.js";
 
 /**
  * Adds `init`, `profile`, `resume`, `boards`, `discover`, `jobs`, `digest`, `serve`, `pause`, `unpause`,
- * `platforms`, `login` and `logout`. `overrides` are passed to every `createApplication`; the real program passes none.
+ * `platforms`, `login`, `logout`, `agent` and `mcp`. `overrides` are passed to every `createApplication`; the real program passes none.
  */
 export function registerCommands(program: Command, overrides: ApplicationOptions = {}): void {
   registerInit(program, overrides);
@@ -25,4 +26,5 @@ export function registerCommands(program: Command, overrides: ApplicationOptions
   registerServe(program, overrides);
   registerApplications(program, overrides);
   registerPlatforms(program, overrides);
+  registerAgent(program, overrides);
 }

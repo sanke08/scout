@@ -4,6 +4,7 @@
  * business logic of their own.
  */
 import { z } from "zod";
+import { goalsAreStarter, type AgentController, type GoalsStore } from "../agent/index.js";
 import {
   DEFAULT_SETTINGS,
   JOB_STATUSES,
@@ -29,7 +30,9 @@ import {
 import { HttpError, describeValidationError } from "./http-helpers.js";
 import {
   SKIP_TAGS,
+  agentStartBodySchema,
   emptyBodySchema,
+  goalsBodySchema,
   jobIdSchema,
   pageEventBodySchema,
   platformBodySchema,
@@ -168,7 +171,9 @@ const getSettings: RouteHandler = ({ dependencies }) => ({
 /** `PUT /api/settings`: validates the whole settings object, saves it, returns the saved copy. */
 const putSettings: RouteHandler = ({ dependencies, body }) => {
   const settings = parseInput(settingsSchema, body);
-  return { status: 200, body: { settings: dependencies.settingsStore.save(settings) } };
+  const saved = dependencies.settingsStore.save(settings);
+  if (saved.automationPaused) dependencies.agent?.stop();
+  return { status: 200, body: { settings: saved } };
 };
 
 /** `GET /api/digest`: the status line facts, the cards, the needs-you list and recent applications. */
@@ -310,6 +315,64 @@ const startAction: RouteHandler = (context) => {
   return { status: 202, body: runner.start(context.params["name"] ?? "") };
 };
 
+/** The autopilot controller. Failure: 404 when this server was started without one. */
+function agentOf(context: RouteContext): AgentController {
+  const { agent } = context.dependencies;
+  if (agent === undefined) throw new HttpError(404, "Autopilot is not enabled.");
+  return agent;
+}
+
+/** The goals store. Failure: 404 when this server was started without one. */
+function goalsOf(context: RouteContext): GoalsStore {
+  const { goals } = context.dependencies;
+  if (goals === undefined) throw new HttpError(404, "Autopilot is not enabled.");
+  return goals;
+}
+
+/** `GET /api/agent`: whether a run is going, its live log and the last result. */
+const getAgent: RouteHandler = (context) => ({ status: 200, body: agentOf(context).state() });
+
+/**
+ * `POST /api/agent/start`: starts one autopilot run in the background. 202 when started; 409 while
+ * a run is going or automation is paused; 400 while the goals are still the starter text.
+ */
+const startAgent: RouteHandler = (context) => {
+  const agent = agentOf(context);
+  const { task, instruction } = parseInput(agentStartBodySchema, context.body);
+  if (agent.state().running) {
+    throw new HttpError(
+      409,
+      "Autopilot is already running. Stop it first, or wait for it to finish.",
+    );
+  }
+  agent.start(task, instruction === "" ? undefined : instruction);
+  return { status: 202, body: agent.state() };
+};
+
+/** `POST /api/agent/stop`: stops the current run. Safe when nothing is running. */
+const stopAgent: RouteHandler = (context) => {
+  const agent = agentOf(context);
+  parseInput(emptyBodySchema, context.body);
+  agent.stop();
+  return { status: 200, body: agent.state() };
+};
+
+/** The reply for the goals routes: the text and whether the owner has written their own. */
+function goalsReply(goals: GoalsStore): RouteReply {
+  const text = goals.load();
+  return { status: 200, body: { text, written: !goalsAreStarter(text) } };
+}
+
+/** `GET /api/goals`: the goals text (the starter text until the owner writes their own). */
+const getGoals: RouteHandler = (context) => goalsReply(goalsOf(context));
+
+/** `PUT /api/goals`: saves the goals text; the store refuses text that is too long. */
+const putGoals: RouteHandler = (context) => {
+  const goals = goalsOf(context);
+  goals.save(parseInput(goalsBodySchema, context.body).text);
+  return goalsReply(goals);
+};
+
 /** The platform settings behind the Control tab. Failure: 404 when this server was started without them. */
 function platformsOf(context: RouteContext): PlatformControl {
   const { platforms } = context.dependencies;
@@ -395,6 +458,11 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", pattern: "/api/resume", handler: buildResume },
   { method: "GET", pattern: "/api/actions", handler: getActions },
   { method: "POST", pattern: "/api/actions/:name", handler: startAction },
+  { method: "GET", pattern: "/api/agent", handler: getAgent },
+  { method: "POST", pattern: "/api/agent/start", handler: startAgent },
+  { method: "POST", pattern: "/api/agent/stop", handler: stopAgent },
+  { method: "GET", pattern: "/api/goals", handler: getGoals },
+  { method: "PUT", pattern: "/api/goals", handler: putGoals },
   { method: "GET", pattern: "/api/platforms", handler: getPlatforms },
   { method: "PUT", pattern: "/api/platforms/:name", handler: putPlatform },
   { method: "GET", pattern: "/api/applications", handler: listApplications },

@@ -1,5 +1,5 @@
 /**
- * Running an outside program (the `claude` or `codex` command) and collecting what it prints.
+ * Running an outside program (the `claude` command) and collecting what it prints.
  *
  * Why it exists: the rest of the brain module only sees a `ProcessRunner` function, so tests can
  * replace it with a fake that never starts a real program, and the real one carries the safety

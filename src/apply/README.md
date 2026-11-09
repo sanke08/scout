@@ -17,20 +17,21 @@ The safe core of applying to jobs on official boards: read the form, map every f
 
 ## Public interface
 
-| Export                                                         | What it does                                                                                                                                 |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `snapshotForm(html)`                                           | Reads a saved form page into a `FormSnapshot`: fields (label, name, type, required, options, selector), the submit control and a shape hash. |
-| `classifyQuestion(label)`                                      | Sorts a question into factual, personal, motivational, legal, demographic or salary with plain keyword rules.                                |
-| `mapFields(snapshot, profile, answerBank, settings)`           | Maps each field to a profile value, an approved answer, the resume, or a status of `needs-you`, `draft-needed` or `unknown`. Never guesses.  |
-| `planApplication({ url, snapshot, mappings, ... })`            | Returns the ordered fill actions and the blockers (required fields that are not ready). A plan with any blocker is never carried out.        |
-| `runApplication(arguments)`                                    | The one place that may press submit. Applies the kill switch, levels, dry run, daily limit, two-pass fill, submit marker and verification.   |
-| `mayAutoSubmit(conditions)`                                    | The single rule that allows a submit: live run, board level `auto`, apply mode `auto`, job `approved`.                                       |
-| `runSelfTest(driver, fixture)`                                 | A dry run on a stable page. Returns `passed` and reasons, so a caller can pause automatic submission for a board.                            |
-| `saveEvidence(directory, evidence)`                            | Writes the form snapshot, filled values, screenshots, confirmation text, timestamps and profile version into a folder.                       |
-| `detectPageBlocker(text, html)`, `looksLikeConfirmation(text)` | Finds a CAPTCHA, sign-in wall, one-time code, assessment or closed job; recognises a real confirmation message.                              |
-| `fillAndVerify(driver, plan)`                                  | The two-pass fill on its own (never submits).                                                                                                |
-| `BrowserDriver`                                                | The small interface a real browser or a fake implements.                                                                                     |
-| `createPlaywrightDriver({ profileDirectory })`                 | Starts the real browser (persistent profile in your own folder, visible by default). Loaded on demand; untested against a real browser.      |
+| Export                                                         | What it does                                                                                                                                  |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `snapshotForm(html)`                                           | Reads a saved form page into a `FormSnapshot`: fields (label, name, type, required, options, selector), the submit control and a shape hash.  |
+| `classifyQuestion(label)`                                      | Sorts a question into factual, personal, motivational, legal, demographic or salary with plain keyword rules.                                 |
+| `mapFields(snapshot, profile, answerBank, settings)`           | Maps each field to a profile value, an approved answer, the resume, or a status of `needs-you`, `draft-needed` or `unknown`. Never guesses.   |
+| `planApplication({ url, snapshot, mappings, ... })`            | Returns the ordered fill actions and the blockers (required fields that are not ready). A plan with any blocker is never carried out.         |
+| `runApplication(arguments)`                                    | The one place that may press submit. Applies the kill switch, levels, dry run, daily limit, two-pass fill, submit marker and verification.    |
+| `mayAutoSubmit(conditions)`                                    | The single rule that allows a submit: live run, board level `auto`, apply mode `auto`, job `approved`.                                        |
+| `runSelfTest(driver, fixture)`                                 | A dry run on a stable page. Returns `passed` and reasons, so a caller can pause automatic submission for a board.                             |
+| `saveEvidence(directory, evidence)`                            | Writes the form snapshot, filled values, screenshots, confirmation text, timestamps and profile version into a folder.                        |
+| `detectPageBlocker(text, html)`, `looksLikeConfirmation(text)` | Finds a CAPTCHA, sign-in wall, one-time code, assessment or closed job; recognises a real confirmation message.                               |
+| `applyModelAnswers(mappings, answers)`                         | Autopilot only: fills fields the profile could not with the model's answers (a choice must be listed, a file is refused, profile values win). |
+| `fillAndVerify(driver, plan)`                                  | The two-pass fill on its own (never submits).                                                                                                 |
+| `BrowserDriver`                                                | The small interface a real browser or a fake implements.                                                                                      |
+| `createPlaywrightDriver({ profileDirectory })`                 | Starts the real browser (persistent profile in your own folder, visible by default). Loaded on demand; untested against a real browser.       |
 
 ```ts
 import {
@@ -82,6 +83,8 @@ const result = await runApplication({
 11. **Verify.** A real confirmation message gives `applied`. Anything else, or any error, gives `unverified`. There is no retry.
 
 A submit is allowed only when all of these hold (`mayAutoSubmit`): the run is live (not a dry run), the board level is `auto`, `settings.applyMode` is `auto`, and the job is `approved`. A run is a dry run when `mode` is `"dry-run"` or when `settings.dryRunFirst` is on and the board has no clean-run record. In every other case the run fills, checks and stops, so Automatic behaves as Fill I submit.
+
+`runApplication` also takes two optional arguments for unattended runs (autopilot, `src/app/commands/apply-autopilot.ts`): `beforeSubmit`, called right before the submit marker (it may throw, for example when the pause switch went on while filling), and `requireNewConfirmation`, which counts a confirmation only when its wording was not already on the page before the click. `scout apply` passes neither.
 
 ## Field mapping rules
 

@@ -1,5 +1,5 @@
 /**
- * The real `Brain`: runs `claude` or `codex` as a command and checks what it prints.
+ * The real `Brain`: runs `claude` (Sonnet 5.5) as a command and checks what it prints.
  *
  * Why it exists: Scout uses the user's existing subscription through the command-line tools (no API
  * key). Everything that can go wrong (missing program, crash, limit, bad output) comes back as a
@@ -14,7 +14,7 @@ import { askUntilValid, type EngineReply } from "./reply-pipeline.js";
 
 /** Options for `createCommandBrain`. Only `engine` is required. */
 export interface CommandBrainOptions {
-  /** Which program to run: "claude" or "codex". */
+  /** Which program to run: only "claude". */
   engine: EngineName;
   /** Starts programs. Default: the real runner with a timeout and an output cap. Tests pass a fake. */
   runner?: ProcessRunner;

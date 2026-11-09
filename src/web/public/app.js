@@ -69,12 +69,16 @@ function onDigestFacts(facts) {
   pause.sync(status.paused);
 }
 
-/** Called by Settings after a save, so the status line follows the new mode and pause state. */
+/**
+ * Called by Settings and by the header button after a save, so the status line follows the new mode
+ * and pause state, and the Control tab shows a running autopilot stopped by a pause.
+ */
 function onSettingsChanged(settings) {
   status.mode = settings.applyMode;
   status.paused = settings.automationPaused;
   renderStatus();
   pause.sync(status.paused);
+  void views.control.refreshAfterPause(status.paused);
 }
 
 /** Called by the Control tab when its health report says whether automation is paused. */

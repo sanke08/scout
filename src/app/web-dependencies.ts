@@ -8,6 +8,7 @@
  * Example: `await startWebServer(createWebDependencies(application), { port: 0 })`.
  */
 import { join } from "node:path";
+import { createAgentController, createGoalsStore } from "../agent/index.js";
 import { createSessionStore, resolveVault, type PlatformOverrides } from "../platforms/index.js";
 import { createActionRunner, type ActionDefinition, type WebDependencies } from "../web/index.js";
 import type { Application } from "./application.js";
@@ -67,6 +68,8 @@ export function createWebDependencies(
     pendingProposals: createPendingProposals(application),
     ledger: application.ledger,
     actions: createActionRunner(createActions(application), application.now),
+    agent: createAgentController(application),
+    goals: createGoalsStore(application.directory),
     healthReport: () => application.healthReport(),
     modelName: MODEL_NAME,
     platforms: {

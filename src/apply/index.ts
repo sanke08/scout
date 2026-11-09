@@ -26,6 +26,12 @@ export {
   type PageBlockerKind,
 } from "./page-checks.js";
 export {
+  MAXIMUM_ANSWER_LENGTH,
+  applyModelAnswers,
+  type ModelAnswerResult,
+  type RefusedAnswer,
+} from "./model-answers.js";
+export {
   planApplication,
   type Blocker,
   type FillAction,

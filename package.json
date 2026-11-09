@@ -16,11 +16,13 @@
     "format:check": "prettier --check .",
     "check": "npm run typecheck && npm run lint && npm run test && npm run format:check",
     "smoke:resume": "tsx src/resume/smoke.ts",
-    "smoke:discovery": "tsx src/discovery/smoke.ts"
+    "smoke:discovery": "tsx src/discovery/smoke.ts",
+    "smoke:agent": "tsx scripts/smoke-agent.ts"
   },
   "license": "MIT",
   "type": "module",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
     "cheerio": "^1.2.0",
     "commander": "^15.0.0",
     "fast-xml-parser": "^5.12.0",

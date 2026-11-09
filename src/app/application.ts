@@ -89,7 +89,7 @@ export interface ApplicationOptions {
    * `FakeBrain` here.
    */
   brain?: Brain;
-  /** Starts the `claude` and `codex` programs. Default: the real runner. Used only without `brain`. */
+  /** Starts the `claude` program. Default: the real runner. Used only without `brain`. */
   processRunner?: ProcessRunner;
   /** Company names the user never wants (feeds the decider's blacklist rule). Default: none. */
   blacklist?: readonly string[];
@@ -173,7 +173,10 @@ export interface Application {
   close(): void;
 }
 
-/** Builds the real brain: Claude and Codex as commands, the other as fallback, with budget and cache. */
+/**
+ * Builds the real brain: the `claude` command (always Sonnet 5.5) with a budget and a cache. It serves
+ * the single-shot jobs (notes, interview plans, mail classification); autopilot runs separately.
+ */
 function buildRealBrain(
   application: Pick<Application, "directory" | "settingsStore" | "profileStore" | "now">,
   processRunner: ProcessRunner | undefined,
@@ -181,15 +184,8 @@ function buildRealBrain(
   const settings = application.settingsStore.load();
   const profile = application.profileStore.load();
   const runnerOption = processRunner === undefined ? {} : { runner: processRunner };
-  const main = settings.mainEngine;
-  const other = main === "claude" ? "codex" : "claude";
-  const primary = createCommandBrain({ engine: main, now: application.now, ...runnerOption });
-  const fallback = settings.switchEngineOnLimit
-    ? createCommandBrain({ engine: other, now: application.now, ...runnerOption })
-    : undefined;
   return createBrainRouter({
-    primary,
-    ...(fallback === undefined ? {} : { fallback }),
+    primary: createCommandBrain({ engine: "claude", now: application.now, ...runnerOption }),
     budget: createFileDailyBudget(application.directory, {
       limitPerDay: settings.dailyModelCallBudget,
       now: application.now,

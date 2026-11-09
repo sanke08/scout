@@ -3,6 +3,7 @@
  * and settings shapes are not redefined here: they come from `src/shared` (one source of truth).
  */
 import { z } from "zod";
+import { AGENT_TASKS } from "../agent/index.js";
 import { EVENT_KINDS, newEventSchema } from "../ledger/index.js";
 import { JOB_STATUSES, boardLevelSchema, platformLoginSchema } from "../shared/index.js";
 
@@ -67,3 +68,20 @@ export const platformBodySchema = z
   .refine((body) => body.login !== undefined || body.level !== undefined, {
     message: "Give a login way, an apply level, or both.",
   });
+
+/** The most extra text a person may give an autopilot run. */
+export const MAXIMUM_INSTRUCTION_CHARACTERS = 2000;
+
+/**
+ * Body of `POST /api/agent/start`: the kind of pass and an optional note for the model.
+ * Example: `{ "task": "custom", "instruction": "Only look at remote roles today." }`.
+ */
+export const agentStartBodySchema = z
+  .object({
+    task: z.enum(AGENT_TASKS),
+    instruction: z.string().trim().max(MAXIMUM_INSTRUCTION_CHARACTERS).optional(),
+  })
+  .strict();
+
+/** Body of `PUT /api/goals`: the whole goals text. The goals store refuses text that is too long. */
+export const goalsBodySchema = z.object({ text: z.string() }).strict();

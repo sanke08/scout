@@ -37,9 +37,16 @@ export const settingsSchema = z.object({
   /** Sign-in way per platform name, e.g. { linkedin: "saved" }. A platform not listed is "manual". */
   platformLogins: z.record(z.string(), platformLoginSchema),
   readAlertEmails: z.boolean(),
+  /** Deprecated (D-013): ignored. Only Sonnet 5.5 through `claude` is used. Kept so old settings files still load. */
   mainEngine: z.enum(["claude", "codex"]),
+  /** Deprecated (D-013): ignored. There is no second engine. Kept so old settings files still load. */
   switchEngineOnLimit: z.boolean(),
+  /** Deprecated (D-013): ignored by autopilot, which is limited by the turn and minute settings below. */
   dailyModelCallBudget: z.number().int().positive(),
+  /** The most model turns one autopilot run may use before it is stopped (1 to 200). */
+  agentMaxTurns: z.number().int().min(1).max(200),
+  /** The most minutes one autopilot run may last before it is stopped (1 to 240). */
+  agentMaxMinutes: z.number().int().min(1).max(240),
   digestTime: z.string().regex(/^\d{2}:\d{2}$/),
   desktopNotification: z.boolean(),
   followUpAfterDays: z.number().int().positive(),
@@ -62,6 +69,8 @@ export const DEFAULT_SETTINGS: Settings = {
   mainEngine: "claude",
   switchEngineOnLimit: true,
   dailyModelCallBudget: 40,
+  agentMaxTurns: 60,
+  agentMaxMinutes: 45,
   digestTime: "08:00",
   desktopNotification: true,
   followUpAfterDays: 7,

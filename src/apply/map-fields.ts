@@ -21,8 +21,10 @@ import type { FormField, FormSnapshot } from "./form-types.js";
  * - `answer-bank`: an approved answer.
  * - `demographic-setting`: the "prefer not to say" setting picked a matching option.
  * - `resume`: the resume file Scout built for this job.
+ * - `model-answer`: an answer the autopilot model gave for this one application (kept in the evidence).
  */
-export type MappingSource = "identity" | "answer-bank" | "demographic-setting" | "resume";
+export type MappingSource =
+  "identity" | "answer-bank" | "demographic-setting" | "resume" | "model-answer";
 
 /**
  * What mapping found for one field.

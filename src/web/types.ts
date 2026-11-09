@@ -3,6 +3,7 @@
  * hands back. Everything the server touches is injected, so tests pass fakes and the real
  * program passes the real stores.
  */
+import type { AgentController, GoalsStore } from "../agent/index.js";
 import type { HealthReport } from "../folders/index.js";
 import type { Ledger } from "../ledger/index.js";
 import type { CredentialVault, SessionStore } from "../platforms/index.js";
@@ -83,6 +84,10 @@ export interface WebDependencies {
   ledger?: Ledger;
   /** Runs "Find jobs now" and "Read inbox now". Left out, the action routes answer 404. */
   actions?: ActionRunner;
+  /** Starts, stops and reports autopilot runs. Left out, the autopilot routes answer 404. */
+  agent?: AgentController;
+  /** The owner's goals text. Left out, the goals routes answer 404. */
+  goals?: GoalsStore;
   /** The health facts the Control tab shows. Left out, `/api/health` answers only `{ ok: true }`. */
   healthReport?: () => HealthReport;
   /** The name of the model Scout uses, shown read-only on the Control tab. Left out, no model line. */
