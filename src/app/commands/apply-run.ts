@@ -28,10 +28,17 @@ import {
   type FillPlan,
   type RunResult,
 } from "../../apply/index.js";
+import {
+  autoLogin,
+  findKnownPlatform,
+  platformForUrl,
+  type CredentialVault,
+} from "../../platforms/index.js";
 import { ScoutError, type JobRecord, type Profile, type Settings } from "../../shared/index.js";
 import type { Application } from "../application.js";
 import { createBoardRunStore, type BoardRunStore } from "../board-runs-store.js";
 import type { ApplyEnvironment } from "./apply-environment.js";
+import { platformServices, type PlatformServices } from "./platform-services.js";
 import {
   LEVEL_NAMES,
   countAppliedToday,
@@ -85,6 +92,8 @@ interface ApplyContext {
   evidenceDirectory: string;
   profileDirectory: string;
   waitSeconds: number;
+  /** The sign-in record, vault and keyboard, for the one automatic sign-in a run may make. */
+  platforms: PlatformServices;
 }
 
 /** Reads the job and refuses one that cannot be applied for, before anything is opened. */
@@ -177,6 +186,7 @@ function refusingDriver(): BrowserDriver {
   };
   return {
     open: refuse,
+    currentUrl: refuse,
     pageText: refuse,
     pageHtml: refuse,
     fill: refuse,
@@ -261,26 +271,82 @@ async function stageOnly(context: ApplyContext): Promise<void> {
   );
 }
 
+/** The platform of the page being applied to, or `undefined` when the address cannot be read. */
+function platformOfRun(context: ApplyContext): string | undefined {
+  try {
+    return platformForUrl(context.url);
+  } catch {
+    return undefined;
+  }
+}
+
 /** A page that needs the user (or is closed): record it, say so, and for a sign-in wall keep the window open. */
 async function stopForPage(
   context: ApplyContext,
   blocker: NonNullable<ReturnType<typeof detectPageBlocker>>,
+  signInNote?: string,
 ): Promise<void> {
   const { jobStore } = context.application;
-  jobStore.transition(
-    context.job.id,
-    blocker.kind === "closed" ? "closed" : "needs-you",
-    blocker.reason,
-  );
-  console.log(`Stopped: ${blocker.reason}`);
+  const platform = platformOfRun(context);
+  const command = platform === undefined ? "scout login <platform>" : `scout login ${platform}`;
+  const reason =
+    blocker.kind === "login"
+      ? `${blocker.reason} Sign in with \`${command}\`, then apply again.`
+      : blocker.reason;
+  jobStore.transition(context.job.id, blocker.kind === "closed" ? "closed" : "needs-you", reason);
+  console.log(`Stopped: ${reason}`);
   if (blocker.kind === "login") {
+    if (signInNote !== undefined) console.log(signInNote);
     console.log(
-      "Sign in yourself in the open browser window; Scout never types a password. The session stays in Scout's own browser profile.",
+      `Sign in yourself in the open browser window, or run \`${command}\`. The session stays in Scout's own browser profile.`,
     );
     await context.environment.readLine(
       `Press Enter here when you are done, then run \`scout undo ${context.job.id}\` and \`scout apply ${context.job.id}\` again. `,
     );
   }
+}
+
+/**
+ * At a sign-in wall, signs in by itself when (and only when) the user chose "saved" for this
+ * platform and credentials exist. One attempt per run, no retry. Returns a note for the user
+ * when the attempt was made and did not work, and `signedIn` when the page should be read again.
+ */
+async function trySavedSignIn(
+  context: ApplyContext,
+  driver: BrowserDriver,
+): Promise<{ signedIn: boolean; note?: string }> {
+  const platform = platformOfRun(context);
+  if (platform === undefined || findKnownPlatform(platform) === undefined) {
+    return { signedIn: false };
+  }
+  if (context.settings.platformLogins[platform] !== "saved") return { signedIn: false };
+  const username = context.platforms.sessions.get(platform)?.username;
+  if (username === undefined || !(await context.platforms.vault.exists(platform, username))) {
+    return {
+      signedIn: false,
+      note: `${platform} is set to saved sign-in, but no credentials are stored. Store them with \`scout login ${platform} --save\`.`,
+    };
+  }
+  context.application.assertNotPaused();
+  console.log(
+    `The page needs a sign-in; signing in to ${platform} with the saved credentials (once).`,
+  );
+  const result = await autoLogin(
+    driver,
+    platform,
+    context.platforms.vault,
+    context.platforms.context,
+  );
+  context.application.actionLog.append({
+    actor: "platforms",
+    action: "auto-login",
+    jobId: context.job.id,
+    detail: result.signedIn
+      ? `Signed in to ${platform} with the saved credentials.`
+      : `Automatic sign-in to ${platform} stopped: ${result.reason}`,
+  });
+  if (result.signedIn) return { signedIn: true };
+  return { signedIn: false, note: result.reason };
 }
 
 /**
@@ -426,24 +492,38 @@ async function confirmSubmission(context: ApplyContext, plan: FillPlan): Promise
   return confirmed;
 }
 
-/** Opens the page with the driver, checks it, plans, confirms (Automatic only), runs and records. */
-async function applyWithDriver(context: ApplyContext, driver: BrowserDriver): Promise<void> {
-  const startedAt = context.application.now().toISOString();
-  let pageText: string;
-  let pageHtml: string;
+/** Opens the application page and reads its text and HTML. A failure is an `unavailable` error and nothing was filled. */
+async function readApplicationPage(
+  context: ApplyContext,
+  driver: BrowserDriver,
+): Promise<{ pageText: string; pageHtml: string }> {
   try {
     await driver.open(context.url);
-    pageText = await driver.pageText();
-    pageHtml = await driver.pageHtml();
+    return { pageText: await driver.pageText(), pageHtml: await driver.pageHtml() };
   } catch (error) {
     throw new ScoutError(
       "unavailable",
       `Scout could not open ${context.url} (${detailOf(error)}). Nothing was filled and the job is unchanged.`,
     );
   }
-  const blocker = detectPageBlocker(pageText, pageHtml);
+}
+
+/** Opens the page with the driver, checks it, plans, confirms (Automatic only), runs and records. */
+async function applyWithDriver(context: ApplyContext, driver: BrowserDriver): Promise<void> {
+  const startedAt = context.application.now().toISOString();
+  let { pageText, pageHtml } = await readApplicationPage(context, driver);
+  let blocker = detectPageBlocker(pageText, pageHtml);
+  let signInNote: string | undefined;
+  if (blocker?.kind === "login") {
+    const attempt = await trySavedSignIn(context, driver);
+    signInNote = attempt.note;
+    if (attempt.signedIn) {
+      ({ pageText, pageHtml } = await readApplicationPage(context, driver));
+      blocker = detectPageBlocker(pageText, pageHtml);
+    }
+  }
   if (blocker !== undefined) {
-    await stopForPage(context, blocker);
+    await stopForPage(context, blocker, signInNote);
     return;
   }
 
@@ -481,6 +561,7 @@ export async function runApplyCommand(
   environment: ApplyEnvironment,
   jobId: string,
   options: ApplyCommandOptions,
+  vault: CredentialVault,
 ): Promise<void> {
   application.assertNotPaused();
   const job = loadApplicableJob(application, jobId);
@@ -536,6 +617,7 @@ export async function runApplyCommand(
     evidenceDirectory: evidenceDirectoryFor(application, job),
     profileDirectory: resolve(options.profileDir ?? join(application.directory, "browser-profile")),
     waitSeconds: parseWaitSeconds(options.wait),
+    platforms: platformServices(application, environment, vault),
   };
   console.log(`Resume: ${context.resumeFile}`);
 

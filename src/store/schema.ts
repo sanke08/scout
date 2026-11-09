@@ -73,6 +73,38 @@ export const SCHEMA_UPGRADE_STEPS: readonly SchemaUpgradeStep[] = [
       `);
     },
   },
+  {
+    version: 3,
+    summary:
+      "Create the application ledger tables: recruiter and follow-up details per job, and the contact history (calls, emails, notes, status changes).",
+    apply(database) {
+      database.exec(`
+        CREATE TABLE application_details (
+          job_id TEXT PRIMARY KEY,
+          external_job_id TEXT,
+          recruiter_name TEXT,
+          recruiter_firm TEXT,
+          recruiter_email TEXT,
+          recruiter_phone TEXT,
+          recruiter_linkedin TEXT,
+          applied_via TEXT,
+          next_step TEXT,
+          next_step_date TEXT,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE application_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          job_id TEXT NOT NULL,
+          at TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          detail TEXT,
+          contact TEXT
+        );
+        CREATE INDEX application_events_job_index ON application_events (job_id, at);
+      `);
+    },
+  },
 ];
 
 /** The newest schema version this code understands. */

@@ -89,6 +89,22 @@ Registered by `registerMailAndNotesCommands` (one line in `src/index.ts`). Scout
 
 Rules the commands keep: the kill switch is checked first; a job must be `resume-ready` or `approved` (a job left in `submitting` is refused and never retried); at Automatic the summary is shown and only a typed `yes` allows the final click (there is no flag that answers for you); a board whose latest self-test failed is held at Fill, I submit; the resume comes from the job folder's tailored PDF, else it is built and compiled into `resumes/` (a missing `pdflatex` is reported and stops the command); evidence goes to `<jobs>/<job folder>/evidence/`, else `evidence/<job id>/`; after you press submit in Fill, `applied` is recorded only when the page shows a confirmation, otherwise `unverified` (`--wait 0` skips waiting and leaves the job unchanged). `board-runs.json` (`{ "schemaVersion": 1, "boards": { "greenhouse": { "cleanDryRuns": 1, "lastCleanRunAt": "...", "lastFailedAt": "..." } } }`) is app-owned; it changes only after a clean dry run or a self-test. The real browser path is untested against a real browser; the tests use the apply module's fake driver.
 
+## Platforms and logins
+
+Some sites need a sign-in before an application opens. For each platform the user chooses, and can change at any time, the **login way** and the **apply level**:
+
+- `manual` (default, safest): the user signs in themselves in Scout's own browser window; Scout reuses the saved session in `<data>/browser-profile`.
+- `saved`: the user stores the username and password once in the OS keychain; when a page needs a sign-in and the session has expired, Scout signs in once, then continues.
+
+| Command                                                                                | What it does                                                                                                                                                             |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scout platforms`                                                                      | Table: platform, login way, credentials saved, last sign-in, apply level                                                                                                 |
+| `scout platforms set <platform> [--login manual\|saved] [--level prepare\|fill\|auto]` | Writes the choice into settings (`platformLogins`, `boardLevels`). For linkedin, indeed and naukri, `saved` or `auto` prints a warning and needs the platform name typed |
+| `scout login <platform> [--save] [--url <address>]`                                    | Opens the sign-in page for you to sign in by hand; `--save` first stores the credentials (the keychain program asks for the password, Scout never sees it)               |
+| `scout logout <platform> [--forget]`                                                   | Clears the sign-in note; `--forget` also deletes the keychain item                                                                                                       |
+
+`scout apply` at a sign-in wall: with `saved` and stored credentials it calls the platform sign-in once, re-opens the application and checks again. Otherwise (or when the sign-in stops at a CAPTCHA, a code or a checkpoint) the job becomes `needs-you` and the message names `scout login <platform>`. It never loops, and never tries twice in six hours per platform. Submitting is unchanged: kill switch, typed yes, daily limit, never twice. Everything that opens a browser or types credentials checks the kill switch first. The vault and keychain program are replaced in tests through `ApplicationOptions.platforms`; the browser through `apply.openBrowser`. See `src/platforms/README.md`.
+
 ## Data folder layout
 
 `SCOUT_DATA_DIR`, or `./data`. Git-ignored.
@@ -101,6 +117,7 @@ Rules the commands keep: the kill switch is checked first; a job must be `resume
 | `boards.json`                       | app          | `{ "schemaVersion": 1, "boards": [{ kind, token, company? }] }` |
 | `scores.json`                       | app          | Model scores by posting id and profile version                  |
 | `proposals.json`                    | profile      | Model-written wordings waiting for approval                     |
+| `platform-sessions.json`            | platforms    | Per platform: username, last sign-in times (never a password)   |
 | `model-budget.json`, `brain-cache/` | brain        | Today's call count and remembered replies                       |
 | `resumes/`                          | app          | `.tex` (and `.pdf`) files written by `scout resume`             |
 

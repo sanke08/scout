@@ -15,6 +15,15 @@ export const boardLevelSchema = z.enum(["prepare", "fill", "auto"]);
 /** The TypeScript type of one validated board level, inferred from its schema. */
 export type BoardLevel = z.infer<typeof boardLevelSchema>;
 
+/**
+ * How Scout signs in to a platform: `manual` (the user signs in in Scout's browser window and the
+ * saved browser session is reused) or `saved` (Scout may type the username and password stored in
+ * the OS keychain, once, when the session has expired).
+ */
+export const platformLoginSchema = z.enum(["manual", "saved"]);
+/** The TypeScript type of one validated sign-in way, inferred from its schema. */
+export type PlatformLogin = z.infer<typeof platformLoginSchema>;
+
 /** The schema that checks one settings. Use it to validate data from files, the web page or a model. */
 export const settingsSchema = z.object({
   applyMode: applyModeSchema,
@@ -25,6 +34,8 @@ export const settingsSchema = z.object({
   minimumShortlistScore: z.number().min(0).max(100),
   /** Level per board name, e.g. { greenhouse: "fill" }. A board not listed is "prepare". */
   boardLevels: z.record(z.string(), boardLevelSchema),
+  /** Sign-in way per platform name, e.g. { linkedin: "saved" }. A platform not listed is "manual". */
+  platformLogins: z.record(z.string(), platformLoginSchema),
   readAlertEmails: z.boolean(),
   mainEngine: z.enum(["claude", "codex"]),
   switchEngineOnLimit: z.boolean(),
@@ -46,6 +57,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dailyApplicationLimit: 10,
   minimumShortlistScore: 75,
   boardLevels: {},
+  platformLogins: {},
   readAlertEmails: false,
   mainEngine: "claude",
   switchEngineOnLimit: true,

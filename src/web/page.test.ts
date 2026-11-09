@@ -436,6 +436,199 @@ describe("digest view", () => {
   });
 });
 
+describe("applications view", () => {
+  interface Entry {
+    id: string;
+    company: string;
+    title: string;
+    link: string;
+    status: string;
+    jobNumber: string;
+    appliedAt: string;
+    followUpDue: boolean;
+    details: Record<string, string>;
+    events: { id: number; at: string; kind: string; summary: string; contact?: string }[];
+    allowedStatuses: string[];
+  }
+  interface ApplicationsModule {
+    createApplicationsView: (
+      root: FakeNode,
+      context: unknown,
+      onDueCount: (count: number) => void,
+    ) => { load: () => Promise<void>; refreshDueCount: () => Promise<void> };
+  }
+
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  function entry(company: string, link = "https://careers.example.com/jobs/NW-1"): Entry {
+    return {
+      id: "abc123",
+      company,
+      title: "Platform Engineer",
+      link,
+      status: "applied",
+      jobNumber: "NW-1",
+      appliedAt: "2026-11-02T12:00:00.000Z",
+      followUpDue: true,
+      details: {
+        recruiterName: "Alex Rivera",
+        recruiterPhone: "+1 555 0100",
+        nextStep: "Call back",
+      },
+      events: [
+        { id: 1, at: "2026-11-02T12:00:00.000Z", kind: "applied", summary: "Applied." },
+        {
+          id: 2,
+          at: "2026-11-03T12:00:00.000Z",
+          kind: "call",
+          summary: "Phone screen",
+          contact: "Alex",
+        },
+      ],
+      allowedStatuses: ["interviewing", "rejected"],
+    };
+  }
+
+  async function openView(item: Entry) {
+    const { createApplicationsView } = await loadModule<ApplicationsModule>("applications-view.js");
+    const calls: { name: string; args: unknown[] }[] = [];
+    const record =
+      (name: string, result: unknown) =>
+      async (...args: unknown[]) => {
+        calls.push({ name, args });
+        if (result instanceof Error) throw result;
+        return result;
+      };
+    const api = {
+      getApplications: record("getApplications", { applications: [item], dueCount: 1 }),
+      getApplication: record("getApplication", item),
+      addApplication: record("addApplication", item),
+      putApplicationDetails: record("putApplicationDetails", item),
+      reportApplicationStatus: record("reportApplicationStatus", {
+        ...item,
+        status: "rejected",
+        allowedStatuses: [],
+      }),
+      addApplicationEvent: record("addApplicationEvent", item.events[1]),
+    };
+    const errors: string[] = [];
+    const dueCounts: number[] = [];
+    const root = new FakeNode();
+    const view = createApplicationsView(
+      root,
+      { api, showError: (message: string) => errors.push(message), clearError: () => undefined },
+      (count) => dueCounts.push(count),
+    );
+    await view.load();
+    return { root, view, calls, errors, dueCounts, api };
+  }
+
+  const byId = (root: FakeNode, id: string): FakeNode =>
+    root.findAll((node) => node.attributes.get("id") === id)[0]!;
+  const byLabel = (root: FakeNode, label: string): FakeNode =>
+    root.findAll((node) => node.attributes.get("aria-label") === label)[0]!;
+  const submit = (form: FakeNode): void => form.fire("submit", { preventDefault: () => undefined });
+
+  it("lists applications and reports how many next steps are due", async () => {
+    const { root, dueCounts } = await openView(entry("Northwind"));
+    expect(root.textContent).toContain("Northwind");
+    expect(root.textContent).toContain("Alex Rivera");
+    expect(root.textContent).toContain("2026-11-02");
+    expect(dueCounts).toEqual([1]);
+  });
+
+  it("shows a company name that looks like markup as plain text", async () => {
+    const hostile = "<img src=x onerror=alert(1)>";
+    const { root, calls } = await openView(entry(hostile));
+    expect(root.textContent).toContain(hostile);
+    expect(root.elements.some((node) => node.tagName === "img")).toBe(false);
+    root.findAll((node) => node.attributes.has("data-id"))[0]!.click();
+    await settle();
+    expect(calls.map((call) => call.name)).toContain("getApplication");
+    expect(root.elements.some((node) => node.tagName === "img")).toBe(false);
+    expect(root.textContent).toContain(hostile);
+  });
+
+  it("opens a panel offering only the allowed statuses, and makes links only for http addresses", async () => {
+    const safe = await openView(entry("Northwind"));
+    safe.root.findAll((node) => node.attributes.has("data-id"))[0]!.click();
+    await settle();
+    const options = byId(safe.root, "apps-s-status").children.map((node) => node.textContent);
+    expect(options).toEqual(["interviewing", "rejected"]);
+    const anchors = safe.root.elements.filter((node) => node.tagName === "a");
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0]!.attributes.get("rel")).toBe("noopener noreferrer");
+    expect(anchors[0]!.attributes.get("target")).toBe("_blank");
+    expect(safe.root.textContent).toContain("Phone screen");
+    expect(safe.root.textContent).toContain("Call");
+
+    const unsafe = await openView(entry("Northwind", "javascript:alert(1)"));
+    unsafe.root.findAll((node) => node.attributes.has("data-id"))[0]!.click();
+    await settle();
+    expect(unsafe.root.elements.some((node) => node.tagName === "a")).toBe(false);
+  });
+
+  it("sends the reported status and shows the server's sentence when it is refused", async () => {
+    const view = await openView(entry("Northwind"));
+    view.root.findAll((node) => node.attributes.has("data-id"))[0]!.click();
+    await settle();
+    byId(view.root, "apps-s-status").value = "rejected";
+    byId(view.root, "apps-s-note").value = "Email from Alex";
+    submit(byLabel(view.root, "Report status"));
+    await settle();
+    const sent = view.calls.find((call) => call.name === "reportApplicationStatus");
+    expect(sent?.args).toEqual(["abc123", { status: "rejected", note: "Email from Alex" }]);
+    expect(view.root.textContent).toContain("Status is now rejected.");
+
+    const refused = await openView(entry("Northwind"));
+    refused.api.reportApplicationStatus = async () => {
+      throw new Error("An application that is applied cannot be moved to offer.");
+    };
+    refused.root.findAll((node) => node.attributes.has("data-id"))[0]!.click();
+    await settle();
+    submit(byLabel(refused.root, "Report status"));
+    await settle();
+    expect(refused.root.textContent).toContain("cannot be moved to offer");
+  });
+
+  it("saves details and logs an entry through the API", async () => {
+    const view = await openView(entry("Northwind"));
+    view.root.findAll((node) => node.attributes.has("data-id"))[0]!.click();
+    await settle();
+    byId(view.root, "apps-d-recruiterEmail").value = " alex@example.com ";
+    submit(byLabel(view.root, "Recruiter and next step"));
+    await settle();
+    const saved = view.calls.find((call) => call.name === "putApplicationDetails");
+    expect((saved?.args[1] as Record<string, string>).recruiterEmail).toBe("alex@example.com");
+
+    byId(view.root, "apps-l-kind").value = "email";
+    byId(view.root, "apps-l-summary").value = "Sent my availability";
+    submit(byLabel(view.root, "Log a call, email or note"));
+    await settle();
+    const logged = view.calls.find((call) => call.name === "addApplicationEvent");
+    expect(logged?.args[1]).toEqual({ kind: "email", summary: "Sent my availability" });
+  });
+
+  it("adds an application made outside Scout with only the fields that were filled", async () => {
+    const view = await openView(entry("Northwind"));
+    const addButton = view.root.elements.find(
+      (node) => node.tagName === "button" && node.textContent === "Add application",
+    )!;
+    addButton.click();
+    byId(view.root, "apps-a-company").value = "Contoso";
+    byId(view.root, "apps-a-title").value = "Backend Engineer";
+    byId(view.root, "apps-a-recruiterName").value = "Alex Rivera";
+    submit(byLabel(view.root, "Add an application"));
+    await settle();
+    const added = view.calls.find((call) => call.name === "addApplication");
+    expect(added?.args[0]).toEqual({
+      company: "Contoso",
+      title: "Backend Engineer",
+      details: { recruiterName: "Alex Rivera" },
+    });
+  });
+});
+
 describe("instant saves", () => {
   interface SettingsModule {
     createSettingsView: (

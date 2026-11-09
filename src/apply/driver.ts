@@ -14,6 +14,11 @@
 export interface BrowserDriver {
   /** Opens the application page and waits until it is usable. */
   open(url: string): Promise<void>;
+  /**
+   * The address the page is on now, after any redirects. Scout reads it before typing a saved
+   * password, so a sign-in page that sent the browser to another site never receives one.
+   */
+  currentUrl(): Promise<string>;
   /** The visible text of the whole page. Used to detect CAPTCHAs, sign-in walls and closed jobs. */
   pageText(): Promise<string>;
   /** The page's HTML, read into a `FormSnapshot`. */

@@ -1,17 +1,18 @@
 /* global document, window, location */
 /**
- * Starts the page: wires the three views (Digest, Profile, Settings) to the address hash
- * (#digest, #profile, #settings), shows the status line and the error banner, and passes
+ * Starts the page: wires the four views (Digest, Profile, Applications, Settings) to the address hash
+ * (#digest, #profile, #applications, #settings), shows the status line and the error banner, and passes
  * keystrokes to the Digest.
  */
 import { api } from "./api-client.js";
 import { clearChildren, h } from "./dom.js";
 import { createDigestView } from "./digest-view.js";
+import { createApplicationsView } from "./applications-view.js";
 import { createProfileView } from "./profile-view.js";
 import { createSettingsView } from "./settings-view.js";
 
-/** The names of the three views, in navigation order. */
-const VIEW_NAMES = ["digest", "profile", "settings"];
+/** The names of the views, in navigation order. */
+const VIEW_NAMES = ["digest", "profile", "applications", "settings"];
 
 /** Plain-words label for each apply mode shown in the status line. */
 const MODE_LABELS = {
@@ -72,10 +73,22 @@ function onSettingsChanged(settings) {
   renderStatus();
 }
 
+/** Shows how many next steps are due beside the Applications tab; nothing when none are. */
+function onDueCount(count) {
+  const badge = document.getElementById("applicationsBadge");
+  badge.textContent = count > 0 ? `${count} due` : "";
+  badge.hidden = count === 0;
+}
+
 const context = { api, showError, clearError };
 const views = {
   digest: createDigestView(document.getElementById("viewDigest"), context, onDigestFacts),
   profile: createProfileView(document.getElementById("viewProfile"), context),
+  applications: createApplicationsView(
+    document.getElementById("viewApplications"),
+    context,
+    onDueCount,
+  ),
   settings: createSettingsView(document.getElementById("viewSettings"), context, onSettingsChanged),
 };
 
@@ -108,3 +121,4 @@ document.addEventListener("keydown", (event) => {
 });
 window.addEventListener("hashchange", route);
 route();
+if (currentViewName() !== "applications") void views.applications.refreshDueCount();

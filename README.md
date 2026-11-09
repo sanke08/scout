@@ -59,6 +59,21 @@ Never put real contact details in `fixtures/`: that folder is public.
 | `npm run format`           | Format with Prettier                    |
 | `npm run check`            | Everything CI runs                      |
 
+## Tracking your applications
+
+Every application, sent by Scout or by you, is kept in one ledger and written to `APPLICATIONS.md` in your data folder after every change.
+
+```bash
+npm run dev -- applications find okafor            # a recruiter called: find the application
+npm run dev -- applications add --company Acme --title "Backend Engineer" --link https://example.com/jobs/12345 --recruiter "Sam Okafor" --phone "+1 555 0100"
+npm run dev -- applications log <id> call "Phone screen Friday" --who Sam
+npm run dev -- applications status <id> rejected "Email from Sam"
+npm run dev -- applications contact <id> --next "Call back" --next-on 2026-11-14
+npm run dev -- applications due                    # next steps that have come
+```
+
+The same actions are on the Applications tab of `scout serve`.
+
 ## Folder layout
 
 ```
@@ -70,7 +85,9 @@ src/
   brain/       Claude Code / Codex bridge, budget, cache, claim check
   discovery/   job board fetchers, normaliser, dedupe, freshness
   decide/      hard rules and keyword ranking
-  web/         local web page: Digest, Profile, Settings
+  web/         local web page: Digest, Applications, Profile, Settings
+  ledger/      every application: recruiter, job id, history, APPLICATIONS.md
+  platforms/   sign-in per platform: by hand or saved in the OS keychain
   app/         composition root and command-line commands
   folders/     job folders, board table, leads, backups, health
   insight/     reading your projects once, interview plans
@@ -84,7 +101,7 @@ Each folder has its own `README.md` with a glossary and its public interface.
 
 ## Safety rules (always on)
 
-- Scout never types a password, solves a CAPTCHA, or bypasses a bot check.
+- Scout never solves a CAPTCHA or bypasses a bot check. By default it never types a password: you sign in by hand once (`scout login <platform>`) and the session is reused. If you opt in per platform (`scout platforms set <platform> --login saved`), it can sign in once per run with credentials kept only in your OS keychain, and it stops at any CAPTCHA or code. See docs/DECISIONS.md D-012.
 - Nothing is submitted, sent or posted without your yes for that action.
 - Resume text comes only from points you wrote or approved; unsupported job keywords are listed, never added.
 - Job postings are data, never instructions.

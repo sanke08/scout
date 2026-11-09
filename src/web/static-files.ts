@@ -39,6 +39,7 @@ export const STATIC_FILES: readonly StaticFileEntry[] = [
   { urlPath: "/tex-preview.js", fileName: "tex-preview.js", contentType: JAVASCRIPT },
   { urlPath: "/digest-view.js", fileName: "digest-view.js", contentType: JAVASCRIPT },
   { urlPath: "/profile-view.js", fileName: "profile-view.js", contentType: JAVASCRIPT },
+  { urlPath: "/applications-view.js", fileName: "applications-view.js", contentType: JAVASCRIPT },
   { urlPath: "/settings-view.js", fileName: "settings-view.js", contentType: JAVASCRIPT },
 ];
 

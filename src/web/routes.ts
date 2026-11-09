@@ -6,19 +6,23 @@
 import { z } from "zod";
 import {
   DEFAULT_SETTINGS,
+  JOB_STATUSES,
   ScoutError,
   profileSchema,
   settingsSchema,
   type JobRecord,
   type JobStatus,
 } from "../shared/index.js";
+import { applicationDetailsSchema, manualApplicationSchema, type Ledger } from "../ledger/index.js";
 import { HttpError, describeValidationError } from "./http-helpers.js";
 import {
   SKIP_TAGS,
   emptyBodySchema,
   jobIdSchema,
+  pageEventBodySchema,
   resumeBodySchema,
   skipBodySchema,
+  statusBodySchema,
 } from "./schemas.js";
 import type { DigestCard, WebDependencies } from "./types.js";
 
@@ -35,6 +39,8 @@ interface RouteContext {
   body: unknown;
   /** Named pieces of the path, e.g. `{ id: "abc" }` for `/api/jobs/abc/approve`. */
   params: Record<string, string>;
+  /** The query string of the address, e.g. `search=alex` for `/api/applications?search=alex`. */
+  query: URLSearchParams;
 }
 
 type RouteHandler = (context: RouteContext) => Promise<RouteReply> | RouteReply;
@@ -192,6 +198,65 @@ const buildResume: RouteHandler = ({ dependencies, body }) => {
   return { status: 200, body: dependencies.resumeBuilder.build(profile, keywords, options) };
 };
 
+/** The ledger behind the Applications routes. Failure: 404 when this server was started without one. */
+function ledgerOf(context: RouteContext): Ledger {
+  const { ledger } = context.dependencies;
+  if (ledger === undefined) throw new HttpError(404, "Applications are not enabled.");
+  return ledger;
+}
+
+/** `GET /api/applications?search=&status=a,b&due=1`: the matching applications and how many are due. */
+const listApplications: RouteHandler = (context) => {
+  const ledger = ledgerOf(context);
+  const statuses = parseInput(
+    z.array(z.enum(JOB_STATUSES)),
+    (context.query.get("status") ?? "").split(",").filter((word) => word.length > 0),
+  );
+  const applications = ledger.list({
+    search: context.query.get("search") ?? "",
+    dueOnly: context.query.get("due") === "1",
+    ...(statuses.length > 0 ? { statuses } : {}),
+  });
+  return { status: 200, body: { applications, dueCount: ledger.due().length } };
+};
+
+/** `GET /api/applications/:id`: one application with its history and the statuses it may move to. */
+const getApplication: RouteHandler = (context) => {
+  const ledger = ledgerOf(context);
+  const detail = ledger.get(jobIdOf(context));
+  if (detail === undefined) {
+    throw new HttpError(404, "No application with that id is in the ledger. Reload the page.");
+  }
+  return { status: 200, body: detail };
+};
+
+/** `POST /api/applications`: records an application made outside Scout. */
+const addApplication: RouteHandler = (context) => {
+  const ledger = ledgerOf(context);
+  return { status: 201, body: ledger.addManual(parseInput(manualApplicationSchema, context.body)) };
+};
+
+/** `PUT /api/applications/:id/details`: saves the recruiter, job id, next step and similar fields. */
+const putApplicationDetails: RouteHandler = (context) => {
+  const ledger = ledgerOf(context);
+  const patch = parseInput(applicationDetailsSchema, context.body);
+  return { status: 200, body: ledger.saveDetails(jobIdOf(context), patch) };
+};
+
+/** `POST /api/applications/:id/status`: reports a new status; the ledger refuses impossible moves. */
+const reportApplicationStatus: RouteHandler = (context) => {
+  const ledger = ledgerOf(context);
+  const { status, note, at } = parseInput(statusBodySchema, context.body);
+  return { status: 200, body: ledger.setStatus(jobIdOf(context), status, note, at) };
+};
+
+/** `POST /api/applications/:id/events`: adds a call, email, message, interview, follow-up or note. */
+const addApplicationEvent: RouteHandler = (context) => {
+  const ledger = ledgerOf(context);
+  const input = parseInput(pageEventBodySchema, context.body);
+  return { status: 201, body: ledger.addEvent(jobIdOf(context), input) };
+};
+
 /** Every route of the API. The README documents the same table. */
 export const ROUTES: readonly Route[] = [
   { method: "GET", pattern: "/api/health", handler: health },
@@ -204,6 +269,12 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", pattern: "/api/jobs/:id/skip", handler: skipJob },
   { method: "POST", pattern: "/api/jobs/:id/undo", handler: undoJob },
   { method: "POST", pattern: "/api/resume", handler: buildResume },
+  { method: "GET", pattern: "/api/applications", handler: listApplications },
+  { method: "POST", pattern: "/api/applications", handler: addApplication },
+  { method: "GET", pattern: "/api/applications/:id", handler: getApplication },
+  { method: "PUT", pattern: "/api/applications/:id/details", handler: putApplicationDetails },
+  { method: "POST", pattern: "/api/applications/:id/status", handler: reportApplicationStatus },
+  { method: "POST", pattern: "/api/applications/:id/events", handler: addApplicationEvent },
 ];
 
 /** Returns the named pieces when `path` fits `pattern`, or `undefined` when it does not. */

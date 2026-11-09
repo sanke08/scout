@@ -55,8 +55,7 @@ const BLOCKER_RULES: readonly BlockerRule[] = [
     textPattern:
       /(please )?(sign|log) ?in to (continue|apply|your account)|create an account to apply|sign in with (google|linkedin)|you must be (signed|logged) in/i,
     htmlPattern: /<input[^>]*type=["']?password/i,
-    reason:
-      "The page needs you to sign in. Scout never types a password, so please sign in and finish this application yourself.",
+    reason: "The page needs you to sign in before the application can be filled.",
   },
   {
     kind: "assessment",

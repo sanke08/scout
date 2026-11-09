@@ -9,8 +9,9 @@
  *
  * It is loaded lazily (see `playwright-loader.ts`) so that importing the apply module never
  * loads Playwright. It launches a persistent browser profile in a dedicated folder, shown on
- * screen by default so the user can watch and take over. It never takes credentials: a sign-in
- * wall is detected from the page text and the run stops; nothing here types a password.
+ * screen by default so the user can watch and take over. It never handles credentials itself: a
+ * sign-in wall is detected from the page text; only the platforms module (with the user's saved
+ * choice) ever asks it to type one, through the plain `fill` call.
  *
  * Example: `const driver = await launchPlaywrightDriver({ profileDirectory: "/data/browser-profile" })`.
  */
@@ -82,6 +83,9 @@ function wrapPage(context: BrowserContext, page: Page): BrowserDriver {
   return {
     async open(url) {
       await page.goto(url, { waitUntil: "domcontentloaded" });
+    },
+    async currentUrl() {
+      return page.url();
     },
     async pageText() {
       return page.innerText("body");

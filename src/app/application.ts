@@ -25,6 +25,14 @@ import {
   type HealthReport,
   type JobFolderManager,
 } from "../folders/index.js";
+import {
+  LEDGER_FILE_NAME,
+  createLedger,
+  createLedgerStore,
+  withLedger,
+  type Ledger,
+} from "../ledger/index.js";
+import type { PlatformOverrides } from "../platforms/index.js";
 import { createProfileStore, createProposalStore, type ProposalStore } from "../profile/index.js";
 import { createResumeBuilder } from "../resume/index.js";
 import {
@@ -108,6 +116,11 @@ export interface ApplicationOptions {
    * pause). Tests pass fakes here; the real program passes none.
    */
   apply?: ApplyEnvironmentOverrides;
+  /**
+   * Replaces the credential vault (the OS keychain) of the platform sign-in commands. Tests pass a
+   * fake vault here; the real program passes none. The browser comes from `apply.openBrowser`.
+   */
+  platforms?: PlatformOverrides;
 }
 
 /** The joined-up Scout: every module, built once, plus the few helpers that need several of them. */
@@ -128,6 +141,8 @@ export interface Application {
   boardStore: BoardStore;
   /** What the model said about each posting (`scores.json`). */
   scoreStore: ScoreStore;
+  /** The application ledger: every application, its recruiter, history and next step. */
+  readonly ledger: Ledger;
   /**
    * The hard-rule decider, built fresh from the stored applications so the cooldown list is
    * current. Example: after a job becomes `applied`, the next call knows its company is cooling down.
@@ -208,7 +223,31 @@ export function createApplication(options: ApplicationOptions = {}): Application
   const actionLog = options.actionLog ?? createActionLog(database!, now);
   const folders =
     options.folders ?? createJobFolderManager({ jobsDirectory: join(directory, "jobs"), now });
-  const jobStore = withFolderSync(storedJobs, { folders, actionLog });
+  let ledgerInstance: Ledger | undefined;
+  let ledgerDatabase: DatabaseSync | undefined;
+  const folderSyncedJobs = withFolderSync(storedJobs, { folders, actionLog });
+  const jobStore = withLedger(
+    folderSyncedJobs,
+    () => getLedger(),
+    (message) =>
+      actionLog.append({ actor: "ledger", action: "ledger-sync-failed", detail: message }),
+  );
+  /** Builds the ledger on first use; it shares the main database when there is one. */
+  function getLedger(): Ledger {
+    if (ledgerInstance === undefined) {
+      const ledgerTables =
+        database ?? (ledgerDatabase = openDatabase(join(directory, "scout.sqlite")));
+      ledgerInstance = createLedger({
+        jobStore,
+        store: createLedgerStore(ledgerTables),
+        now,
+        filePath: join(directory, LEDGER_FILE_NAME),
+        onFileError: (message) =>
+          actionLog.append({ actor: "ledger", action: "ledger-file-failed", detail: message }),
+      });
+    }
+    return ledgerInstance;
+  }
   const proposalStore = createProposalStore(join(directory, "proposals.json"), { now });
   const discovery =
     options.discovery ??
@@ -236,6 +275,9 @@ export function createApplication(options: ApplicationOptions = {}): Application
     discovery,
     boardStore: createBoardStore(join(directory, "boards.json")),
     scoreStore: createScoreStore(join(directory, "scores.json")),
+    get ledger() {
+      return getLedger();
+    },
     decider() {
       const applications = jobStore
         .list({ status: [...APPLIED_STATUSES] })
@@ -267,6 +309,7 @@ export function createApplication(options: ApplicationOptions = {}): Application
     },
     close() {
       database?.close();
+      ledgerDatabase?.close();
     },
   };
   return application;

@@ -19,6 +19,7 @@ export function createWebDependencies(application: Application): WebDependencies
     resumeBuilder: application.resumeBuilder,
     digestProvider: createDigestProvider(application),
     pendingProposals: createPendingProposals(application),
+    ledger: application.ledger,
     now: application.now,
   };
 }

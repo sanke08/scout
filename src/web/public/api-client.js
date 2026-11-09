@@ -1,4 +1,4 @@
-/* global fetch */
+/* global fetch, URLSearchParams */
 /**
  * The page's only way to talk to the server: one function per API route. Data always comes from
  * the server; nothing is kept in the browser's own storage.
@@ -42,6 +42,22 @@ export const api = {
   approveJob: (id) => request("POST", `/api/jobs/${encodeURIComponent(id)}/approve`),
   skipJob: (id, tag) => request("POST", `/api/jobs/${encodeURIComponent(id)}/skip`, { tag }),
   undoJob: (id) => request("POST", `/api/jobs/${encodeURIComponent(id)}/undo`),
+  getApplications: ({ search, statuses, dueOnly }) => {
+    const query = new URLSearchParams();
+    if (search) query.set("search", search);
+    if (statuses.length > 0) query.set("status", statuses.join(","));
+    if (dueOnly) query.set("due", "1");
+    const text = query.toString();
+    return request("GET", text === "" ? "/api/applications" : `/api/applications?${text}`);
+  },
+  getApplication: (id) => request("GET", `/api/applications/${encodeURIComponent(id)}`),
+  addApplication: (body) => request("POST", "/api/applications", body),
+  putApplicationDetails: (id, details) =>
+    request("PUT", `/api/applications/${encodeURIComponent(id)}/details`, details),
+  reportApplicationStatus: (id, body) =>
+    request("POST", `/api/applications/${encodeURIComponent(id)}/status`, body),
+  addApplicationEvent: (id, body) =>
+    request("POST", `/api/applications/${encodeURIComponent(id)}/events`, body),
   buildResume: (keywords, company) =>
     request("POST", "/api/resume", company ? { keywords, company } : { keywords }),
 };

@@ -7,6 +7,7 @@
  */
 import type { Command } from "commander";
 import type { ApplicationOptions } from "../application.js";
+import { resolveVault } from "../../platforms/index.js";
 import { resolveApplyEnvironment } from "./apply-environment.js";
 import { registerApprovalCommands } from "./apply-approval.js";
 import { runApplyCommand, type ApplyCommandOptions } from "./apply-run.js";
@@ -17,6 +18,7 @@ import { withApplication } from "./with-application.js";
 export function registerApplyCommands(program: Command, overrides: ApplicationOptions = {}): void {
   registerApprovalCommands(program, overrides);
   const environment = resolveApplyEnvironment(overrides.apply);
+  const vault = resolveVault(overrides.platforms);
 
   const apply = program
     .command("apply")
@@ -36,7 +38,7 @@ export function registerApplyCommands(program: Command, overrides: ApplicationOp
     )
     .action((jobId: string, options: ApplyCommandOptions) =>
       withApplication(overrides, (application) =>
-        runApplyCommand(application, environment, jobId, options),
+        runApplyCommand(application, environment, jobId, options, vault),
       ),
     );
 

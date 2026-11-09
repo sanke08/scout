@@ -8,6 +8,7 @@
  * - Health: `buildHealthReport`, `renderHealthText`, `isHeartbeatStale`.
  * - Background service: `renderLaunchAgentPlist` (text only).
  */
+export { writeTextAtomic } from "./atomic-file.js";
 export { createJobFolderManager, JOB_FILE_NAME, SENT_FOLDER_NAME } from "./job-folder.js";
 export type {
   EnsureJobFolderOptions,

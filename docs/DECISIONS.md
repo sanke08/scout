@@ -75,3 +75,19 @@ Status: accepted
 Context: Parsers were written from fixtures; real feeds can differ.
 Choice: `npm run smoke:discovery` fetches real public boards and is never part of `npm test`. The body size cap is 25 MiB.
 Consequences: Workable and Recruitee are unchecked against live feeds until a real token is tried.
+
+## D-011 (2026-11-09): An application ledger, fed by the job store
+
+Status: accepted
+Context: The owner must never lose track of an application: who the recruiter is, the job id and link, and what happened after (calls, rejections), including applications made outside Scout.
+Options: A parse the action log and `job.md` files when asked; B tables for details and history, written by a wrapper around the job store; C a hand-edited Markdown file.
+Choice: B. The wrapper means every status change from anywhere is recorded. `APPLICATIONS.md` is generated from the tables and never edited by hand. A user-reported status goes through the state machine by legal steps only.
+Consequences: Schema version 3. History before this change is not back-filled. The same data is shown on the command line and the Applications page.
+
+## D-012 (2026-11-09): Two ways to sign in, chosen per platform
+
+Status: accepted
+Context: Earlier, Scout never typed a password. The owner wants a choice per platform: sign in by hand (session reused) or let Scout sign in with credentials stored securely, and to change it at any time.
+Options: A manual only; B manual or saved credentials, per platform, opt-in; C always saved.
+Choice: B, default manual. Credentials live only in the OS keychain; Scout never receives the password while saving, never logs it and never sends it to a model. Auto sign-in happens once per run and at most once per six hours, only on the platform's own domain, and stops at any CAPTCHA, one-time code or checkpoint. Choosing saved credentials or Automatic for LinkedIn, Indeed or Naukri needs a typed confirmation because automating those sites may break their terms and risk the account.
+Consequences: This supersedes the "Scout never types a password" rule in the idea document for platforms set to saved. Submitting is unchanged: kill switch, typed yes, daily limit, never twice.

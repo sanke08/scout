@@ -50,6 +50,7 @@ Written when a module is merged: date, what was built, what the checks actually 
 - **2026-11-07 brain:** command bridge, router, budget, cache, fake brain, claim check. 340 tests at merge. The Claude Code flags were checked against the installed tool and one real call returned the expected JSON.
 - **2026-11-07 discovery:** six board parsers, feed reader, normaliser, dedupe, flags. 476 tests at merge. `npm run smoke:discovery` against real public boards: Greenhouse, Ashby, SmartRecruiters and Lever parsed; Workable and Recruitee tokens tried did not exist, so those two parsers are unchecked against live feeds. The response size cap was raised to 25 MiB after a real Lever board exceeded 5 MiB.
 - **2026-11-07 web:** local server and Digest, Profile, Settings page. 563 tests at merge. The engineer checked it in a real browser pane (digest keys, profile edit and save, settings save, no console errors); light theme and phone width were not checked.
+- **2026-11-09 ledger and platforms:** application ledger (recruiter, job id, link, history, next step, `APPLICATIONS.md`), `scout applications` commands, the Applications tab, and per-platform sign-in (by hand or saved in the OS keychain) with `scout platforms`, `scout login` and `scout logout`. 1161 tests. Not run against a real browser, keychain or site; the login addresses for LinkedIn, Indeed and Naukri are best guesses. History before this change is not back-filled.
 
 ## Risk register
 

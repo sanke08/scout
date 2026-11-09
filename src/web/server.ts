@@ -80,6 +80,7 @@ async function handleApi(
   request: IncomingMessage,
   response: ServerResponse,
   path: string,
+  query: URLSearchParams,
   dependencies: WebDependencies,
   hosts: Set<string>,
 ): Promise<void> {
@@ -102,7 +103,7 @@ async function handleApi(
     checkOrigin(request, hosts);
     body = await readJsonBody(request);
   }
-  const reply = await match.handler({ dependencies, body, params: match.params });
+  const reply = await match.handler({ dependencies, body, params: match.params, query });
   sendJson(response, reply.status, reply.body);
 }
 
@@ -116,9 +117,10 @@ async function handleRequest(
 ): Promise<void> {
   try {
     checkHost(request, hosts);
-    const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    const path = url.pathname;
     if (path.startsWith("/api/")) {
-      await handleApi(request, response, path, dependencies, hosts);
+      await handleApi(request, response, path, url.searchParams, dependencies, hosts);
       return;
     }
     if (request.method !== "GET") throw new HttpError(405, "Pages can only be read with GET.");

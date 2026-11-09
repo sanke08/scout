@@ -26,6 +26,8 @@ export interface FakeDriverOptions {
   corruptions?: Record<string, string>;
   /** When true, `submit` throws after being recorded (a crash during the click). */
   submitThrows?: boolean;
+  /** The address `currentUrl` reports after an open (to simulate a redirect). Default: the address opened. */
+  currentUrl?: string;
   /** When true, `open` throws. */
   openThrows?: boolean;
 }
@@ -44,6 +46,7 @@ export function createFakeDriver(options: FakeDriverOptions): FakeDriver {
   const calls: string[] = [];
   const values = new Map<string, string>();
   let submitted = false;
+  let openedUrl = "";
 
   const find = (selector: string) => {
     const matches = $(selector);
@@ -56,7 +59,11 @@ export function createFakeDriver(options: FakeDriverOptions): FakeDriver {
     values,
     async open(url) {
       calls.push(`open ${url}`);
+      openedUrl = url;
       if (options.openThrows === true) throw new Error("The page could not be opened.");
+    },
+    async currentUrl() {
+      return options.currentUrl ?? openedUrl;
     },
     async pageText() {
       calls.push("pageText");

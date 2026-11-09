@@ -1,6 +1,6 @@
 # web
 
-The local web server and the Digest, Profile and Settings page, bound to 127.0.0.1. The approved look and behaviour is in `reference/scout-page.html` (fictional data, read-only reference).
+The local web server and the Digest, Profile, Applications and Settings page, bound to 127.0.0.1. The approved look and behaviour is in `reference/scout-page.html` (fictional data, read-only reference).
 
 **Owner:** the `web` agent, branch `feat/web`. Only this folder (and its tests and fixtures) changes in its branch.
 
@@ -10,7 +10,7 @@ The local web server and the Digest, Profile and Settings page, bound to 127.0.0
 
 ## What it is
 
-A small HTTP server (`node:http`, no framework) that serves one page with three views and a JSON API behind it. The server holds no logic of its own: it checks input, calls the stores and the resume builder it was given, and shapes the reply. Everything it needs is passed in, so tests use fakes.
+A small HTTP server (`node:http`, no framework) that serves one page with four views and a JSON API behind it. The server holds no logic of its own: it checks input, calls the stores and the resume builder it was given, and shapes the reply. Everything it needs is passed in, so tests use fakes.
 
 ```
 const server = await startWebServer(
@@ -20,7 +20,7 @@ const server = await startWebServer(
 // server.url is "http://127.0.0.1:4173"; await server.close() stops it.
 ```
 
-Optional dependencies: `now` (a clock, tests inject a fixed one) and `pendingProposals` (model-written wordings waiting for approval, shown read-only on the Profile view).
+Optional dependencies: `ledger` (the application ledger; without it the Applications routes answer 404 "Applications are not enabled."), `now` (a clock, tests inject a fixed one) and `pendingProposals` (model-written wordings waiting for approval, shown read-only on the Profile view).
 
 ## How to run it
 
@@ -39,25 +39,35 @@ Checks: `npm run check`. The tests start a real server on a free port and talk t
 
 ## Routes
 
-| Method and path                | Body                                         | Reply                                                                                       |
-| ------------------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| GET `/`, `/styles.css`, `*.js` | none                                         | The page and its files (fixed list)                                                         |
-| GET `/api/health`              | none                                         | `{ ok: true }`                                                                              |
-| GET `/api/profile`             | none                                         | `{ profile, pendingProposals? }`                                                            |
-| PUT `/api/profile`             | the whole profile (`profileSchema`)          | `{ profile, version }`; the store bumps the version                                         |
-| GET `/api/settings`            | none                                         | `{ settings, defaults }`                                                                    |
-| PUT `/api/settings`            | the whole settings object (`settingsSchema`) | `{ settings }`                                                                              |
-| GET `/api/digest`              | none                                         | `{ generatedAt, mode, automationPaused, skipTags, cards, needsYou, recentlyApplied }`       |
-| POST `/api/jobs/:id/approve`   | none or `{}`                                 | `{ job }`; the job becomes `approved`                                                       |
-| POST `/api/jobs/:id/skip`      | `{ tag }` (one of `SKIP_TAGS`)               | `{ job }`; the job becomes `skipped`, the tag is the reason                                 |
-| POST `/api/jobs/:id/undo`      | none or `{}`                                 | `{ job }`; the job returns to `shortlisted`                                                 |
-| POST `/api/resume`             | `{ keywords: string[], company?: string }`   | the `ResumeBuild` of the saved profile (LaTeX, estimates, matched and not-in-profile terms) |
+| Method and path                     | Body                                             | Reply                                                                                        |
+| ----------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| GET `/`, `/styles.css`, `*.js`      | none                                             | The page and its files (fixed list)                                                          |
+| GET `/api/health`                   | none                                             | `{ ok: true }`                                                                               |
+| GET `/api/profile`                  | none                                             | `{ profile, pendingProposals? }`                                                             |
+| PUT `/api/profile`                  | the whole profile (`profileSchema`)              | `{ profile, version }`; the store bumps the version                                          |
+| GET `/api/settings`                 | none                                             | `{ settings, defaults }`                                                                     |
+| PUT `/api/settings`                 | the whole settings object (`settingsSchema`)     | `{ settings }`                                                                               |
+| GET `/api/digest`                   | none                                             | `{ generatedAt, mode, automationPaused, skipTags, cards, needsYou, recentlyApplied }`        |
+| POST `/api/jobs/:id/approve`        | none or `{}`                                     | `{ job }`; the job becomes `approved`                                                        |
+| POST `/api/jobs/:id/skip`           | `{ tag }` (one of `SKIP_TAGS`)                   | `{ job }`; the job becomes `skipped`, the tag is the reason                                  |
+| POST `/api/jobs/:id/undo`           | none or `{}`                                     | `{ job }`; the job returns to `shortlisted`                                                  |
+| POST `/api/resume`                  | `{ keywords: string[], company?: string }`       | the `ResumeBuild` of the saved profile (LaTeX, estimates, matched and not-in-profile terms)  |
+| GET `/api/applications`             | query: `search`, `status` (comma list), `due=1`  | `{ applications: LedgerEntry[], dueCount }`                                                  |
+| GET `/api/applications/:id`         | none                                             | `LedgerDetail` (entry, `events` oldest first, `allowedStatuses`); 404 when not in the ledger |
+| POST `/api/applications`            | `manualApplicationSchema`                        | 201 and the `LedgerDetail` of an application made outside Scout                              |
+| PUT `/api/applications/:id/details` | `applicationDetailsSchema`                       | the `LedgerDetail`; an empty string clears a field                                           |
+| POST `/api/applications/:id/status` | `{ status, note?, at? }`                         | the `LedgerDetail`; a move the ledger refuses is 409 with its sentence                       |
+| POST `/api/applications/:id/events` | `newEventSchema`, kind not `status` or `applied` | 201 and the new history entry                                                                |
 
 Status codes: 400 invalid input, 403 wrong host or origin, 404 unknown route or job or missing profile, 405 wrong method (with `Allow`), 409 illegal transition, 413 body too large, 415 not JSON, 500 unexpected (the cause is logged, never sent). A `ScoutError` from a store keeps its own sentence and maps by code.
 
 ## The page
 
-Static files in `src/web/public/`: `index.html`, `styles.css`, and plain ES modules (`app.js` starts the page; `digest-view.js`, `profile-view.js`, `settings-view.js` draw the views; `api-client.js` is the only code that calls the server; `dom.js` builds elements through `textContent` only; `highlight.js` marks keywords; `tex-preview.js` reads the resume's LaTeX back as lines for the preview sheet). Views are chosen by the address hash: `#digest`, `#profile`, `#settings`. Keys on the Digest: `j` `k` move, `a` approve, `s` skip then pick a tag, `Enter` details. The page does not build resumes: it calls `POST /api/resume` (after a short pause while typing) and shows what comes back. No data is kept in the browser's own storage.
+Static files in `src/web/public/`: `index.html`, `styles.css`, and plain ES modules (`app.js` starts the page; `digest-view.js`, `profile-view.js`, `applications-view.js`, `settings-view.js` draw the views; `api-client.js` is the only code that calls the server; `dom.js` builds elements through `textContent` only; `highlight.js` marks keywords; `tex-preview.js` reads the resume's LaTeX back as lines for the preview sheet). Views are chosen by the address hash: `#digest`, `#profile`, `#applications`, `#settings`. Keys on the Digest: `j` `k` move, `a` approve, `s` skip then pick a tag, `Enter` details. The page does not build resumes: it calls `POST /api/resume` (after a short pause while typing) and shows what comes back. No data is kept in the browser's own storage.
+
+### The Applications tab
+
+Beside Digest, Profile and Settings, with a badge showing how many next steps are due. The top has a search box (company, role, recruiter, phone, job id, notes), a status filter, a "Due only" toggle and "Add application". The table lists Applied, Company, Role, Job ID, Status, Recruiter and Next step; on a phone the less useful columns are hidden. A row (or its company button) opens a panel with the facts and posting link (only http and https addresses become links, opened in a new tab with `noopener noreferrer`), editable recruiter and job fields with the next step and its date, a "Report status" control that offers only `allowedStatuses`, a form to log a call, email, message, interview, follow-up or note, and the history with each kind named. Server error sentences appear beside the form that caused them. Everything is built with `textContent`; nothing is kept in browser storage.
 
 ## Glossary
 
@@ -67,4 +77,5 @@ Static files in `src/web/public/`: `index.html`, `styles.css`, and plain ES modu
 - **Skip tag:** the short reason given when skipping a job ("Wrong location", "Too junior", "Company", "Not interested"). It is stored as the transition reason.
 - **Tailor preview:** the keyword box on the Profile view and the server's answer: which keywords the profile supports and which it does not.
 - **Pending proposal:** a model-written wording waiting for approval; shown read-only and changes nothing.
+- **Application (ledger entry):** a job that was sent, with the recruiter, job id, next step and history kept by the ledger. The Applications tab is its view.
 - **Own origin:** `http://127.0.0.1:<port>` or `http://localhost:<port>` for the running server; the only origin allowed to change data.

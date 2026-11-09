@@ -3,6 +3,7 @@
  * hands back. Everything the server touches is injected, so tests pass fakes and the real
  * program passes the real stores.
  */
+import type { Ledger } from "../ledger/index.js";
 import type {
   JobRecord,
   JobStore,
@@ -64,6 +65,8 @@ export interface WebDependencies {
   digestProvider: DigestProvider;
   /** Pending model proposals to show on the Profile view. Left out when there are none. */
   pendingProposals?: () => PendingProposal[];
+  /** The application ledger behind the Applications tab. Left out, those routes answer 404. */
+  ledger?: Ledger;
   /** The clock; tests inject a fixed one. Defaults to the real time. */
   now?: () => Date;
 }
