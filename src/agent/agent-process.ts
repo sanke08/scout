@@ -5,7 +5,7 @@
  * its exit. Tests pass a fake `AgentSpawner` that prints canned stream-json and never starts a
  * real program.
  */
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 
 /** What the runner asks the spawner to start. */
@@ -42,9 +42,29 @@ const MAXIMUM_ERROR_CHARACTERS = 2000;
 /** How long the command may take to obey a polite stop before it is killed hard. */
 const KILL_ESCALATION_MILLISECONDS = 3000;
 
+/**
+ * Sends a signal to the whole process group of `child` (the command and every program it started,
+ * including Scout's tool server), falling back to the command alone when the group is gone.
+ */
+function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  try {
+    if (child.pid !== undefined) {
+      process.kill(-child.pid, signal);
+      return;
+    }
+  } catch {
+    // The group no longer exists; try the command itself.
+  }
+  child.kill(signal);
+}
+
 /** The real spawner, over `node:child_process`. */
 export const spawnAgentProcess: AgentSpawner = (request) => {
-  const child = spawn(request.command, [...request.args], { stdio: ["pipe", "pipe", "pipe"] });
+  // Its own process group, so a stop reaches the command AND the tool server it started.
+  const child = spawn(request.command, [...request.args], {
+    stdio: ["pipe", "pipe", "pipe"],
+    detached: true,
+  });
   let errorText = "";
   let startFailure: string | undefined;
 
@@ -76,7 +96,11 @@ export const spawnAgentProcess: AgentSpawner = (request) => {
   return {
     kill() {
       if (child.exitCode !== null || child.signalCode !== null) return;
-      child.kill("SIGTERM");
+      // Polite stop for the whole group: the tool server finishes (and records) a submit that was
+      // already past its marker, then ends. A hard kill goes to the command alone, never the group,
+      // because killing the tool server mid-submit would strand the job; it ends by itself when its
+      // input closes (waiting at most a minute for a running call).
+      signalGroup(child, "SIGTERM");
       setTimeout(() => {
         if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
       }, KILL_ESCALATION_MILLISECONDS).unref();

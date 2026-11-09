@@ -9,6 +9,7 @@
  * Example: `resolveApplyEnvironment({ readLine: async () => "yes" }).readLine("Sure? ")` gives `"yes"`
  * without touching the keyboard; every method left out uses the real thing.
  */
+import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { createPlaywrightDriver, type BrowserDriver } from "../../apply/index.js";
 import { compileResume, type CompiledResume } from "../../resume/index.js";
@@ -20,6 +21,14 @@ export interface BrowserOpenOptions {
   profileDirectory: string;
   /** True for a hidden browser (self-tests); false shows the window so the user can watch and take over. */
   headless: boolean;
+}
+
+/** What starting the detached helper window needs. */
+export interface HelperRequest {
+  /** The arguments after the Scout program file, for example `["apply-keep-open", jobId, ...]`. */
+  args: string[];
+  /** The absolute data folder, so the helper opens the same one whatever its working folder. */
+  dataDirectory: string;
 }
 
 /** Every outside effect of the apply commands. */
@@ -36,6 +45,12 @@ export interface ApplyEnvironment {
     outputDirectory: string,
     fileStem: string,
   ): Promise<CompiledResume>;
+  /**
+   * Starts Scout again as a detached background process (its own session, no input or output,
+   * it keeps running after this process ends). Resolves once the process has started; rejects with
+   * the reason when it could not be started. Default: spawns the current program file.
+   */
+  startHelper(request: HelperRequest): Promise<void>;
   /** Waits. Default: a real timer. Used between looks for the confirmation page. */
   pause(milliseconds: number): Promise<void>;
 }
@@ -82,6 +97,31 @@ function readLineFromKeyboard(prompt: string): Promise<string> {
   });
 }
 
+/** The real `startHelper`: the same Node program and Scout file, detached from this process. */
+function startDetachedHelper(request: HelperRequest): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const entryFile = process.argv[1];
+    if (entryFile === undefined) {
+      reject(new Error("the Scout program file is not known"));
+      return;
+    }
+    try {
+      const child = spawn(process.execPath, [...process.execArgv, entryFile, ...request.args], {
+        detached: true,
+        stdio: "ignore",
+        env: { ...process.env, SCOUT_DATA_DIR: request.dataDirectory },
+      });
+      child.once("error", reject);
+      child.once("spawn", () => {
+        child.unref();
+        resolve();
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 /** Fills in the real default for everything `overrides` leaves out. */
 export function resolveApplyEnvironment(
   overrides: ApplyEnvironmentOverrides | undefined,
@@ -94,6 +134,7 @@ export function resolveApplyEnvironment(
       overrides?.compileResume ??
       ((texSource, outputDirectory, fileStem) =>
         compileResume(texSource, outputDirectory, undefined, fileStem)),
+    startHelper: overrides?.startHelper ?? startDetachedHelper,
     pause:
       overrides?.pause ??
       ((milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))),

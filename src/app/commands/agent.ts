@@ -70,7 +70,8 @@ export function registerAgent(
       `Run one pass in the foreground and print the live log (${AGENT_TASKS.join(", ")}; default hunt).`,
     )
     .option("--instruction <text>", "your own words for this run (needed for custom)")
-    .action((task: string | undefined, options: { instruction?: string }) =>
+    .option("--web", "let a custom run use web search and page fetch on known job-board hosts")
+    .action((task: string | undefined, options: { instruction?: string; web?: boolean }) =>
       withApplication(overrides, async (application) => {
         const kind = parseTask(task ?? "hunt");
         if (kind === "custom" && !options.instruction?.trim()) {
@@ -87,7 +88,7 @@ export function registerAgent(
         process.on("SIGINT", stop);
         process.on("SIGTERM", stop);
         try {
-          runner.start(kind, options.instruction);
+          runner.start(kind, options.instruction, { web: options.web === true });
           const result = await runner.done();
           if (result === undefined) return;
           console.log("");

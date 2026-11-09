@@ -46,14 +46,21 @@ export interface AgentState {
   last?: AgentRunResult;
 }
 
+/** Extra choices the owner makes when starting a run. */
+export interface AgentStartOptions {
+  /** Let a `custom` run use web search and page fetch on known job-board hosts. Default false; other tasks ignore it. */
+  web?: boolean;
+}
+
 /** Starts, stops and reports autopilot runs. One run at a time. */
 export interface AgentController {
   /**
    * Starts a run in the background and returns at once. `instruction` is extra text from the user
    * for a `custom` task or a note for any task.
-   * Failure: a ScoutError("paused") when paused, ("invalid-input") when a run is already going.
+   * Failure: a ScoutError("paused") when paused, ("invalid-input") when a run is already going
+   * (in this process or another one on the same data folder).
    */
-  start(task: AgentTask, instruction?: string): void;
+  start(task: AgentTask, instruction?: string, options?: AgentStartOptions): void;
   /** Stops the current run (kills the `claude` process). Safe when nothing runs. */
   stop(): void;
   state(): AgentState;

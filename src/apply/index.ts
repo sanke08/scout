@@ -28,6 +28,7 @@ export {
 export {
   MAXIMUM_ANSWER_LENGTH,
   applyModelAnswers,
+  type AnswerRules,
   type ModelAnswerResult,
   type RefusedAnswer,
 } from "./model-answers.js";

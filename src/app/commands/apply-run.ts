@@ -13,14 +13,12 @@
  * Honest status: the real browser path is untested against a real browser; every test uses the
  * apply module's fake driver on saved fictional forms.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   detectPageBlocker,
-  confirmationIsNew,
   mayAutoSubmit,
   runApplication,
-  saveEvidence,
   snapshotForm,
   type BrowserDriver,
   type FillPlan,
@@ -38,7 +36,9 @@ import {
   planForm,
   platformOfAddress,
   refusingDriver,
+  saveOwnerSubmitEvidence,
   trySavedSignIn,
+  waitForConfirmation,
 } from "./apply-core.js";
 import { platformServices, type PlatformServices } from "./platform-services.js";
 import {
@@ -67,9 +67,6 @@ export interface ApplyCommandOptions {
 
 /** How long to wait for the user to press submit when `--wait` is not given (ten minutes). */
 export const DEFAULT_WAIT_SECONDS = 600;
-
-/** How long Scout pauses between two looks at the page while waiting for the confirmation. */
-const POLL_MILLISECONDS = 3000;
 
 /** Everything one apply run knows, gathered once so the steps below take one argument. */
 interface ApplyContext {
@@ -269,39 +266,6 @@ function trySavedSignInHere(
   });
 }
 
-/**
- * Looks at the page until a real confirmation message appears or the time is up.
- * Example: a page that shows "Thank you for applying!" on the second look returns that text; a page
- * that never does returns `undefined` after `timeoutSeconds`.
- */
-async function waitForConfirmation(
-  driver: BrowserDriver,
-  environment: ApplyEnvironment,
-  timeoutSeconds: number,
-): Promise<string | undefined> {
-  const readPageText = async (): Promise<string> => {
-    try {
-      return await driver.readConfirmation();
-    } catch {
-      // The page may be between two loads; look again on the next round.
-      return "";
-    }
-  };
-  // Text already on the form before the user submits (for example a banner saying "your
-  // application has been received" on a re-opened form) must never count as a confirmation.
-  const textBeforeSubmit = await readPageText();
-  let waitedMilliseconds = 0;
-  for (;;) {
-    const text = await readPageText();
-    if (confirmationIsNew(textBeforeSubmit, text)) {
-      return text;
-    }
-    if (waitedMilliseconds >= timeoutSeconds * 1000) return undefined;
-    await environment.pause(POLL_MILLISECONDS);
-    waitedMilliseconds += POLL_MILLISECONDS;
-  }
-}
-
 /** Saves the final evidence after the user's own submit. A failure here is reported, never hidden. */
 async function saveFinalEvidence(
   context: ApplyContext,
@@ -311,20 +275,15 @@ async function saveFinalEvidence(
   confirmationText: string | undefined,
   outcome: string,
 ): Promise<void> {
-  const beforePath = join(context.evidenceDirectory, "screenshot-before-submit.png");
-  const filledValues: Record<string, string> = {};
-  for (const action of plan.actions) filledValues[action.fieldKey] = action.value;
   try {
-    const screenshotAfterSubmit = await driver.screenshot();
-    saveEvidence(context.evidenceDirectory, {
-      snapshot: plan.snapshot,
-      filledValues,
-      ...(existsSync(beforePath) ? { screenshotBeforeSubmit: readFileSync(beforePath) } : {}),
-      screenshotAfterSubmit,
-      ...(confirmationText === undefined ? {} : { confirmationText }),
+    await saveOwnerSubmitEvidence({
+      driver,
+      plan,
+      evidenceDirectory: context.evidenceDirectory,
       startedAt,
       finishedAt: context.application.now().toISOString(),
       profileVersion: context.profile.version,
+      confirmationText,
       outcome,
     });
   } catch (error) {

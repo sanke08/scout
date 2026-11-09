@@ -51,6 +51,27 @@ export function countAppliedToday(actionLog: ActionLog, now: Date): number {
     ).length;
 }
 
+/**
+ * Counts the jobs that were moved to `submitting` today, from the action log. Every submit attempt
+ * writes exactly one such line before the click, so this counts attempts whose outcome is not yet
+ * known as well as finished ones. It is what the atomic daily-limit claim uses.
+ * Example: three jobs moved to `submitting` today and one yesterday give 3.
+ */
+export function countSubmitsToday(actionLog: ActionLog, now: Date): number {
+  const today = dayKey(now);
+  const jobs = new Set<string>();
+  for (const entry of actionLog.recent(ACTION_LOG_SCAN_LIMIT)) {
+    if (
+      entry.action === "transition" &&
+      /^[a-z-]+ -> submitting: /.test(entry.detail) &&
+      dayKey(new Date(entry.at)) === today
+    ) {
+      jobs.add(entry.jobId ?? entry.detail);
+    }
+  }
+  return jobs.size;
+}
+
 /** The folder that holds every job folder of this data folder. */
 export function jobsFolderOf(application: Pick<Application, "directory">): string {
   return join(application.directory, "jobs");

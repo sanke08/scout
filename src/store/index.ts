@@ -4,4 +4,5 @@ export { createJobStore } from "./job-store.js";
 export { CURRENT_SCHEMA_VERSION, openDatabase } from "./schema.js";
 export { assertNotPaused, createSettingsStore } from "./settings-store.js";
 export type { DatabaseSync } from "./sqlite-module.js";
+export { runInTransaction } from "./transaction.js";
 export { ALLOWED_TRANSITIONS, TERMINAL_STATUSES, allowedNextStatuses } from "./transitions.js";

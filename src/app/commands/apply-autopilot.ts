@@ -6,14 +6,17 @@
  * Why it exists (D-013): the model decides which jobs to apply to and what the unusual questions
  * deserve. Scout still owns the safety of the act itself, so this file reuses the same apply module
  * as `scout apply`: `runApplication` is the only code that presses submit, the submit marker is
- * written before the click, the daily limit and the kill switch are checked (the switch again right
- * before the click), a confirmation counts only when its wording is new after the click, and a job
+ * written before the click, the daily limit is claimed in the same database transaction as that
+ * marker, the kill switch is checked (again right before the click), a confirmation counts only when its wording is new after the click, and a job
  * is never submitted twice because the state machine refuses it.
  *
  * What the owner's level per board means here (no typed yes exists in this path):
  * - Prepare only: read the form without a browser, stage the resume and answers, open nothing.
- * - Fill, I submit: fill in the persistent browser, leave the window open, mark the job `needs-you`
- *   ("form filled, waiting for you to press submit"), return at once.
+ * - Fill, I submit: hand the form to a detached helper process (`scout apply-keep-open`, see
+ *   `apply-keep-open.ts`) that fills it in the persistent browser, keeps the window open and waits
+ *   for the owner's own submit, so the outcome is recorded after the tool and the run have ended.
+ *   The tool marks the job `needs-you` ("waiting for you to press submit") and returns at once.
+ *   If no helper can be started it falls back to Prepare only and says so.
  * - Automatic: fill, submit, read the confirmation, record `applied` or `unverified`.
  * The apply-mode setting (a digest approval habit) and a per-job approval are not asked for: the
  * level is the owner's decision. "Dry run first" and a failed board self-test are still honoured.
@@ -21,9 +24,11 @@
  * Example: `await applyForAutopilot(application, services, { jobId, answers: { notice: "30 days" } })`
  * returns `{ outcome: "applied", status: "applied", message: "...", ... }`.
  */
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import * as cheerio from "cheerio";
+import { canonicalizeUrl } from "../../discovery/index.js";
+import { WAITING_FOR_SUBMIT_REASON, returnFromNeedsYou } from "../../ledger/index.js";
 import {
   applyModelAnswers,
   detectPageBlocker,
@@ -31,6 +36,7 @@ import {
   snapshotForm,
   type BrowserDriver,
   type FieldMapping,
+  type AnswerRules,
   type FillPlan,
   type FormSnapshot,
   type PageBlocker,
@@ -47,6 +53,7 @@ import {
 } from "../../shared/index.js";
 import type { Application } from "../application.js";
 import { createBoardRunStore } from "../board-runs-store.js";
+import { answerRulesFor } from "./apply-answer-rules.js";
 import type { ApplyEnvironment } from "./apply-environment.js";
 import {
   closeQuietly,
@@ -78,7 +85,7 @@ export const FORM_PAGE_TEXT_LIMIT = 4000;
 const APPLICABLE_STATUSES: readonly JobStatus[] = ["shortlisted", "resume-ready", "approved"];
 
 /** The reason written when Fill, I submit leaves a filled form for the owner. */
-export const WAITING_FOR_OWNER_REASON = "form filled, waiting for you to press submit";
+export const WAITING_FOR_OWNER_REASON = WAITING_FOR_SUBMIT_REASON;
 
 /** One field the form still needs an answer for. */
 export interface MissingField {
@@ -97,10 +104,13 @@ export interface FilledField {
 
 /** What `applyForAutopilot` returns to the tool. */
 export interface AutopilotApplyResult {
-  /** How the run ended; `blocked` means answers are still missing and nothing was changed. */
-  outcome: RunOutcome | "blocked";
-  /** The job's status after the run. */
-  status: JobStatus;
+  /**
+   * How the run ended; `blocked` means answers are still missing and nothing was changed;
+   * `waiting-for-you` means a helper window was started and the owner presses submit.
+   */
+  outcome: RunOutcome | "blocked" | "waiting-for-you";
+  /** The job's status after the run, or `waiting-for-you` when a helper window holds the form. */
+  status: JobStatus | "waiting-for-you";
   /** A full sentence saying what happened and what comes next. */
   message: string;
   /** The folder holding the evidence, when any was saved. */
@@ -128,7 +138,7 @@ export interface ReadForm {
 }
 
 /** Reads the job or throws `not-found`. */
-function requireJob(application: Application, jobId: string): JobRecord {
+export function requireJob(application: Application, jobId: string): JobRecord {
   const job = application.jobStore.get(jobId);
   if (job === undefined) {
     throw new ScoutError(
@@ -140,12 +150,14 @@ function requireJob(application: Application, jobId: string): JobRecord {
 }
 
 /**
- * The page to read or fill: the job's own link, or `applyUrl` when it is on the same site (so a
- * posting's text can never point the owner's data at another website).
- * Failure: `invalid-input` for an address that is not http(s) or is on another site.
+ * The page to read or fill: the job's own link, or `applyUrl` when it is exactly one of the
+ * addresses stored for this posting (its canonical link or one of its sources, compared in
+ * canonical form). A shared job-board host serves many companies, so a same-site address could
+ * send the owner's data to another company's form; only the posting's own addresses are allowed.
+ * Failure: `invalid-input` for an address that is not http(s) or is not one of the posting's own.
  */
-function applicationAddress(job: JobRecord, applyUrl: string | undefined): string {
-  const parse = (address: string): URL => {
+export function applicationAddress(job: JobRecord, applyUrl: string | undefined): string {
+  const checked = (address: string): string => {
     let parsed: URL;
     try {
       parsed = new URL(address);
@@ -158,18 +170,26 @@ function applicationAddress(job: JobRecord, applyUrl: string | undefined): strin
         `Scout only opens http or https pages, not "${address}".`,
       );
     }
-    return parsed;
+    return canonicalizeUrl(address);
   };
-  const own = parse(job.canonicalUrl);
-  if (applyUrl === undefined) return own.toString();
-  const chosen = parse(applyUrl);
-  if (chosen.hostname !== own.hostname) {
+  const own = checked(job.canonicalUrl);
+  if (applyUrl === undefined) return job.canonicalUrl;
+  const wanted = checked(applyUrl);
+  const known = new Set([own]);
+  for (const source of job.sources) {
+    try {
+      known.add(canonicalizeUrl(source.url));
+    } catch {
+      // A stored source that is not a web address can never match an applyUrl.
+    }
+  }
+  if (!known.has(wanted)) {
     throw new ScoutError(
       "invalid-input",
-      `applyUrl must be on the same site as the job's link (${own.hostname}), but it is on ${chosen.hostname}.`,
+      `applyUrl must be one of this posting's own addresses (${job.canonicalUrl}), but it is not. Leave applyUrl out to use the posting's own address; never send the owner's data to another page.`,
     );
   }
-  return chosen.toString();
+  return applyUrl;
 }
 
 /** The visible text of an HTML page, tidied and cut. */
@@ -211,7 +231,7 @@ export async function readFormForAutopilot(
  * A resume file the model named, proven to be a PDF inside this job's own folder or the data
  * folder's `resumes` folder, so a model can never make Scout upload some other file.
  */
-function checkedResumePath(application: Application, path: string): string {
+export function checkedResumePath(application: Application, path: string): string {
   const resolved = resolve(path);
   const allowedFolders = [jobsFolderOf(application), join(application.directory, "resumes")];
   const inside = allowedFolders.some((folder) => resolved.startsWith(resolve(folder) + sep));
@@ -225,7 +245,7 @@ function checkedResumePath(application: Application, path: string): string {
 }
 
 /** Everything one run knows once the job, settings and level are settled. */
-interface RunContext {
+export interface RunContext {
   application: Application;
   services: AutopilotServices;
   job: JobRecord;
@@ -240,6 +260,10 @@ interface RunContext {
   resumeFile: string | undefined;
   evidenceDirectory: string;
   answers: Record<string, string>;
+  /** What every model answer must pass: the owner's `neverUsed` list and the profile's facts. */
+  answerRules: AnswerRules;
+  /** True once Scout has begun to shut down (the run was stopped); a submit is then never started. */
+  shouldStop: () => boolean;
 }
 
 /** Throws the apply module's own refusals before anything is opened. */
@@ -275,7 +299,7 @@ function filledFields(plan: FillPlan, mappings: FieldMapping[]): FilledField[] {
  * came from, and the answers that were refused or ignored. The evidence folder also holds the form
  * as it was seen, so a later reader can compare question and answer.
  */
-function saveAnswers(
+export function saveAnswers(
   context: RunContext,
   plan: FillPlan,
   mappings: FieldMapping[],
@@ -303,7 +327,7 @@ function saveAnswers(
 }
 
 /** Builds the result value, adding the evidence folder when it exists. */
-function report(
+export function report(
   context: RunContext,
   outcome: AutopilotApplyResult["outcome"],
   message: string,
@@ -359,7 +383,8 @@ function stopForPage(
 
 /**
  * Level Prepare only: no browser. Reads the form with a plain download when it can, saves a staging
- * note in the evidence folder and leaves the job as it was.
+ * note in the evidence folder and leaves the job as it was (unless a question only the owner may
+ * answer is on the form: then the job goes to `needs-you`).
  */
 async function prepareOnly(context: RunContext): Promise<AutopilotApplyResult> {
   const { application, services, answers } = context;
@@ -381,7 +406,11 @@ async function prepareOnly(context: RunContext): Promise<AutopilotApplyResult> {
     );
   }
   const snapshot = snapshotForm(html);
-  const given = applyModelAnswers(mapForm(snapshot, context.profile, context.settings), answers);
+  const given = applyModelAnswers(
+    mapForm(snapshot, context.profile, context.settings),
+    answers,
+    context.answerRules,
+  );
   const plan = planForm(context.url, snapshot, given.mappings, context.resumeFile);
   const parts = {
     filled: filledFields(plan, given.mappings),
@@ -409,8 +438,13 @@ async function prepareOnly(context: RunContext): Promise<AutopilotApplyResult> {
   );
 }
 
-/** The `blocked` result: nothing changed, the model must answer the listed fields and call again. */
-function blockedResult(
+/**
+ * The result when the plan has blockers. A required question only the owner may answer (legal,
+ * salary, personal, or demographic when the setting is "ask each time") moves the job to `needs-you`
+ * with the question, whatever answer the model gave. Otherwise nothing changes and the model must
+ * answer the listed fields and call again.
+ */
+export function blockedResult(
   context: RunContext,
   plan: FillPlan,
   parts: Partial<AutopilotApplyResult>,
@@ -420,6 +454,13 @@ function blockedResult(
     label: blocker.label,
     reason: blocker.reason,
   }));
+  const ownerOnly = plan.blockers.filter((blocker) => blocker.status === "needs-you");
+  if (ownerOnly.length > 0) {
+    const questions = ownerOnly.map((blocker) => `"${blocker.label}"`).join(", ");
+    const reason = `The form asks ${ownerOnly.length === 1 ? "a question" : "questions"} only you can answer: ${questions}. Scout never lets the model answer legal, salary, personal or (when your setting is ask each time) demographic questions. Answer on the form yourself, or add an approved answer to your profile, then put the job back with \`scout undo ${context.job.id}\`.`;
+    context.application.jobStore.transition(context.job.id, "needs-you", reason);
+    return report(context, "needs-you", reason, { ...parts, missingFields });
+  }
   return report(
     context,
     "blocked",
@@ -439,8 +480,11 @@ function settingsForLevel(settings: Settings, level: RunContext["level"]): Setti
   return settings;
 }
 
-/** The arguments `runApplication` takes in this path. */
-function runArguments(
+/**
+ * The arguments `runApplication` takes in this path. At Automatic the submit marker also claims
+ * today's limit in one transaction, and a submit is never started once Scout is shutting down.
+ */
+export function runArguments(
   context: RunContext,
   plan: FillPlan,
   driver: BrowserDriver,
@@ -460,13 +504,31 @@ function runArguments(
     now: () => application.now(),
     profileVersion: context.profile.version,
     evidenceDirectory: context.evidenceDirectory,
-    beforeSubmit: () => application.assertNotPaused(),
+    beforeSubmit: () => {
+      application.assertNotPaused();
+      if (context.shouldStop()) {
+        throw new ScoutError(
+          "paused",
+          "Scout is stopping, so the application was not submitted. The form is untouched; the job can be applied for again later.",
+        );
+      }
+    },
+    ...(level === "auto"
+      ? {
+          markSubmitting: (reason: string) =>
+            application.claimSubmitSlot(
+              context.job.id,
+              reason,
+              context.settings.dailyApplicationLimit,
+            ),
+        }
+      : {}),
     requireNewConfirmation: true,
   };
 }
 
 /** Moves the job to the status `runApplication` needs: `approved` to submit, `resume-ready` to fill. */
-function readyJobForRun(context: RunContext): void {
+export function readyJobForRun(context: RunContext): void {
   const { jobStore } = context.application;
   const current = jobStore.get(context.job.id)?.status;
   const target: JobStatus = context.level === "auto" ? "approved" : "resume-ready";
@@ -480,60 +542,90 @@ function readyJobForRun(context: RunContext): void {
   );
 }
 
-/** Levels Fill and Automatic: open the browser, check the page, fill, and submit only at Automatic. */
-async function fillOrSubmit(context: RunContext): Promise<AutopilotApplyResult> {
+/** A page opened, checked and planned: ready to fill. */
+export interface PlannedForm {
+  plan: FillPlan;
+  mappings: FieldMapping[];
+  refused: RefusedAnswer[];
+  ignored: RefusedAnswer[];
+  parts: Pick<AutopilotApplyResult, "filled" | "refusedAnswers" | "ignoredAnswers">;
+}
+
+/**
+ * Opens the application page in `driver`, signs in once when the owner chose saved credentials,
+ * and plans the fill from the owner's profile and the model's answers. Returns the plan, or the
+ * already recorded result when the page needs the owner (sign-in wall, CAPTCHA, closed job) or the
+ * plan still has blockers.
+ */
+export async function openAndPlan(
+  context: RunContext,
+  driver: BrowserDriver,
+): Promise<PlannedForm | AutopilotApplyResult> {
   const { application, services, settings } = context;
+  let page = await openAndRead(driver, context.url);
+  let blocker = detectPageBlocker(page.pageText, page.pageHtml);
+  let signInNote: string | undefined;
+  if (blocker?.kind === "login") {
+    const attempt = await trySavedSignIn({
+      application,
+      settings,
+      platforms: platformServices(application, services.environment, services.vault),
+      driver,
+      url: context.url,
+      jobId: context.job.id,
+      say: () => {},
+    });
+    signInNote = attempt.note;
+    if (attempt.signedIn) {
+      page = await openAndRead(driver, context.url);
+      blocker = detectPageBlocker(page.pageText, page.pageHtml);
+    }
+  }
+  if (blocker !== undefined) return stopForPage(context, blocker, signInNote);
+
+  const snapshot = snapshotForm(page.pageHtml);
+  const given = applyModelAnswers(
+    mapForm(snapshot, context.profile, settings),
+    context.answers,
+    context.answerRules,
+  );
+  const plan = planForm(context.url, snapshot, given.mappings, context.resumeFile);
+  const parts = {
+    filled: filledFields(plan, given.mappings),
+    refusedAnswers: given.refused,
+    ignoredAnswers: given.ignored,
+  };
+  if (plan.blockers.length > 0) return blockedResult(context, plan, parts);
+  return {
+    plan,
+    mappings: given.mappings,
+    refused: given.refused,
+    ignored: given.ignored,
+    parts,
+  };
+}
+
+/** True when `openAndPlan` returned a plan (not an already recorded result). */
+export function isPlannedForm(value: PlannedForm | AutopilotApplyResult): value is PlannedForm {
+  return "plan" in value;
+}
+
+/** Level Automatic: open the browser, check the page, fill, submit once, and record the outcome. */
+async function fillAndSubmit(context: RunContext): Promise<AutopilotApplyResult> {
+  const { application, services } = context;
   const driver = await services.environment.openBrowser({
     profileDirectory: join(application.directory, "browser-profile"),
     headless: false,
   });
-  let keepWindow = false;
   try {
-    let page = await openAndRead(driver, context.url);
-    let blocker = detectPageBlocker(page.pageText, page.pageHtml);
-    let signInNote: string | undefined;
-    if (blocker?.kind === "login") {
-      const attempt = await trySavedSignIn({
-        application,
-        settings,
-        platforms: platformServices(application, services.environment, services.vault),
-        driver,
-        url: context.url,
-        jobId: context.job.id,
-        say: () => {},
-      });
-      signInNote = attempt.note;
-      if (attempt.signedIn) {
-        page = await openAndRead(driver, context.url);
-        blocker = detectPageBlocker(page.pageText, page.pageHtml);
-      }
-    }
-    if (blocker !== undefined) return stopForPage(context, blocker, signInNote);
-
-    const snapshot = snapshotForm(page.pageHtml);
-    const given = applyModelAnswers(mapForm(snapshot, context.profile, settings), context.answers);
-    const plan = planForm(context.url, snapshot, given.mappings, context.resumeFile);
-    const parts = {
-      filled: filledFields(plan, given.mappings),
-      refusedAnswers: given.refused,
-      ignoredAnswers: given.ignored,
-    };
-    if (plan.blockers.length > 0) return blockedResult(context, plan, parts);
+    const planned = await openAndPlan(context, driver);
+    if (!isPlannedForm(planned)) return planned;
+    const { plan, mappings, refused, ignored, parts } = planned;
 
     readyJobForRun(context);
     const run = await runApplication(runArguments(context, plan, keepOpen(driver), context.level));
-    saveAnswers(context, plan, given.mappings, given.refused, given.ignored);
+    saveAnswers(context, plan, mappings, refused, ignored);
 
-    if (run.outcome === "filled-for-review") {
-      application.jobStore.transition(context.job.id, "needs-you", WAITING_FOR_OWNER_REASON);
-      keepWindow = true;
-      return report(
-        context,
-        "filled-for-review",
-        `The form is filled and checked and the browser window is left open for the owner to review and press submit (the job is marked needs-you: ${WAITING_FOR_OWNER_REASON}). Nothing was submitted.${context.levelNote}`,
-        parts,
-      );
-    }
     if (run.outcome === "dry-run-complete" && run.cleanFill) {
       context.recordCleanDryRun();
       return report(
@@ -545,8 +637,145 @@ async function fillOrSubmit(context: RunContext): Promise<AutopilotApplyResult> 
     }
     return report(context, run.outcome, run.reason, parts);
   } finally {
-    if (!keepWindow) await closeQuietly(driver);
+    await closeQuietly(driver);
   }
+}
+
+/** The folder, inside the data folder, where hand-off files and helper locks live. */
+export function helperFolderOf(application: Pick<Application, "directory">): string {
+  return join(application.directory, "apply-helpers");
+}
+
+/** A job id made safe to use in a file name. */
+export function helperFileStem(jobId: string): string {
+  return jobId.replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
+/** What the tool leaves for the helper: the model's answers and the choices it made. */
+export interface HelperHandOff {
+  answers: Record<string, string>;
+  resumePath?: string;
+  applyUrl?: string;
+}
+
+/** The file the helper reads its hand-off from. */
+export function handOffPathOf(application: Pick<Application, "directory">, jobId: string): string {
+  return join(helperFolderOf(application), `${helperFileStem(jobId)}.json`);
+}
+
+/** The lock file that says a helper owns this job's window. */
+export function lockPathOf(application: Pick<Application, "directory">, jobId: string): string {
+  return join(helperFolderOf(application), `${helperFileStem(jobId)}.lock`);
+}
+
+/** True when `processId` is a running process (signal 0 only checks). */
+export function processIsRunning(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** True when a helper that is still running holds this job's window. */
+export function helperIsRunning(
+  application: Pick<Application, "directory">,
+  jobId: string,
+): boolean {
+  const lockPath = lockPathOf(application, jobId);
+  if (!existsSync(lockPath)) return false;
+  try {
+    const held = JSON.parse(readFileSync(lockPath, "utf8")) as { pid?: unknown };
+    return typeof held.pid === "number" && processIsRunning(held.pid);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Level Fill, I submit: validates what a plain download can show, then hands the form to a
+ * detached helper that fills it, keeps the window open and records the owner's own submit. The job
+ * goes to `needs-you` ("waiting for you to press submit") at once and the tool returns. When no
+ * helper can be started the job is put back and the run falls back to Prepare only, saying so.
+ */
+async function handOffToHelper(context: RunContext): Promise<AutopilotApplyResult> {
+  const { application, services } = context;
+  if (helperIsRunning(application, context.job.id)) {
+    throw new ScoutError(
+      "unsafe",
+      `A browser window for job ${context.job.id} is already open, waiting for the owner to press submit. Scout will not open a second one.`,
+    );
+  }
+  let blockedAlready: AutopilotApplyResult | undefined;
+  try {
+    const snapshot = snapshotForm(await services.environment.readFormPage(context.url));
+    if (snapshot.fields.length > 0) {
+      const given = applyModelAnswers(
+        mapForm(snapshot, context.profile, context.settings),
+        context.answers,
+        context.answerRules,
+      );
+      const plan = planForm(context.url, snapshot, given.mappings, context.resumeFile);
+      if (plan.blockers.length > 0) {
+        blockedAlready = blockedResult(context, plan, {
+          filled: filledFields(plan, given.mappings),
+          refusedAnswers: given.refused,
+          ignoredAnswers: given.ignored,
+        });
+      }
+    }
+  } catch {
+    // A page that cannot be downloaded or has no fields is checked by the helper's browser.
+  }
+  if (blockedAlready !== undefined) return blockedAlready;
+
+  const handOff: HelperHandOff = {
+    answers: context.answers,
+    ...(context.resumeFile === undefined ? {} : { resumePath: context.resumeFile }),
+    ...(context.url === context.job.canonicalUrl ? {} : { applyUrl: context.url }),
+  };
+  const handOffPath = handOffPathOf(application, context.job.id);
+  mkdirSync(helperFolderOf(application), { recursive: true });
+  writeFileSync(handOffPath, `${JSON.stringify(handOff, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  application.jobStore.transition(context.job.id, "needs-you", WAITING_FOR_OWNER_REASON);
+  try {
+    await services.environment.startHelper({
+      args: ["apply-keep-open", context.job.id, "--answers-file", handOffPath],
+      dataDirectory: resolve(application.directory),
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    rmSync(handOffPath, { force: true });
+    returnFromNeedsYou(
+      application.jobStore,
+      context.job.id,
+      "The helper window could not be started, so the job was put back.",
+    );
+    const staged = await prepareOnly(context);
+    return {
+      ...staged,
+      message: `A separate window that waits for the owner could not be started (${detail}), so this fell back to Prepare only. ${staged.message}`,
+    };
+  }
+  application.actionLog.append({
+    actor: "autopilot",
+    action: "apply-handed-off",
+    jobId: context.job.id,
+    detail: "Started a helper that fills the form and waits for the owner to press submit.",
+  });
+  return {
+    outcome: "waiting-for-you",
+    status: "waiting-for-you",
+    message: `A browser window is being opened by a separate helper that fills the form, keeps it open and records the result when the owner presses submit. Scout does not submit at this level. The job is marked needs-you (${WAITING_FOR_OWNER_REASON}). Do not call apply_to_job for it again.${context.levelNote}`,
+    missingFields: [],
+    filled: [],
+    refusedAnswers: [],
+    ignoredAnswers: [],
+  };
 }
 
 /** What `applyForAutopilot` needs from the model. */
@@ -556,8 +785,56 @@ export interface AutopilotApplyInput {
   answers: Record<string, string>;
   /** A PDF made by `build_resume`; default: the job folder's tailored resume. */
   resumePath?: string;
-  /** The application page when it differs from the job's link; it must be on the same site. */
+  /** The application page when it differs from the job's link; it must be one of the posting's own addresses. */
   applyUrl?: string;
+  /** True once the server has begun to stop; a submit is then never started. Default: never. */
+  shouldStop?: () => boolean;
+}
+
+/**
+ * Builds everything one run knows. `forcedLevel` is for the helper, which always fills and never
+ * submits whatever the settings say now.
+ */
+export function buildRunContext(
+  application: Application,
+  services: AutopilotServices,
+  job: JobRecord,
+  input: Omit<AutopilotApplyInput, "jobId">,
+  forcedLevel?: RunContext["level"],
+): RunContext {
+  const settings = application.settingsStore.load();
+  const profile = application.profileStore.load();
+  const runs = createBoardRunStore(join(application.directory, "board-runs.json"));
+  const level =
+    forcedLevel ??
+    effectiveLevel({
+      settings,
+      level: settings.boardLevels[job.board] ?? "prepare",
+      boardSelfTestFailed: runs.hasFailedSelfTest(job.board),
+    });
+  return {
+    application,
+    services,
+    job,
+    settings,
+    profile,
+    level,
+    levelNote:
+      settings.boardLevels[job.board] === "auto" && level === "fill"
+        ? " The board is set to Automatic, but its latest self-test failed, so it is held back to Fill, I submit."
+        : "",
+    boardHasCleanRun: runs.hasCleanRun(job.board),
+    recordCleanDryRun: () => runs.recordCleanDryRun(job.board, application.now()),
+    url: applicationAddress(job, input.applyUrl),
+    resumeFile:
+      input.resumePath === undefined
+        ? findSavedResume(application, job)
+        : checkedResumePath(application, input.resumePath),
+    evidenceDirectory: evidenceDirectoryFor(application, job),
+    answers: input.answers,
+    answerRules: answerRulesFor(profile, job),
+    shouldStop: input.shouldStop ?? (() => false),
+  };
 }
 
 /**
@@ -574,16 +851,9 @@ export async function applyForAutopilot(
   application.assertNotPaused();
   const job = requireJob(application, input.jobId);
   requireApplicable(job);
-  const settings = application.settingsStore.load();
-  const profile = application.profileStore.load();
-  const runs = createBoardRunStore(join(application.directory, "board-runs.json"));
-  const level = effectiveLevel({
-    settings,
-    level: settings.boardLevels[job.board] ?? "prepare",
-    boardSelfTestFailed: runs.hasFailedSelfTest(job.board),
-  });
-  const boardHasCleanRun = runs.hasCleanRun(job.board);
-  const dryRun = settings.dryRunFirst && !boardHasCleanRun;
+  const context = buildRunContext(application, services, job, input);
+  const { settings, level } = context;
+  const dryRun = settings.dryRunFirst && !context.boardHasCleanRun;
   if (
     level === "auto" &&
     !dryRun &&
@@ -594,32 +864,13 @@ export async function applyForAutopilot(
       `Today's limit of ${settings.dailyApplicationLimit} applications is reached, so Scout will not submit another one until tomorrow.`,
     );
   }
-  const context: RunContext = {
-    application,
-    services,
-    job,
-    settings,
-    profile,
-    level,
-    levelNote:
-      settings.boardLevels[job.board] === "auto" && level === "fill"
-        ? " The board is set to Automatic, but its latest self-test failed, so it is held back to Fill, I submit."
-        : "",
-    boardHasCleanRun,
-    recordCleanDryRun: () => runs.recordCleanDryRun(job.board, application.now()),
-    url: applicationAddress(job, input.applyUrl),
-    resumeFile:
-      input.resumePath === undefined
-        ? findSavedResume(application, job)
-        : checkedResumePath(application, input.resumePath),
-    evidenceDirectory: evidenceDirectoryFor(application, job),
-    answers: input.answers,
-  };
   application.actionLog.append({
     actor: "autopilot",
     action: "apply-start",
     jobId: job.id,
     detail: `Applying at level ${level} on ${job.board}.`,
   });
-  return level === "prepare" ? prepareOnly(context) : fillOrSubmit(context);
+  if (level === "prepare") return prepareOnly(context);
+  if (level === "fill") return handOffToHelper(context);
+  return fillAndSubmit(context);
 }

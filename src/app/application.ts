@@ -37,6 +37,7 @@ import { createProfileStore, createProposalStore, type ProposalStore } from "../
 import { createResumeBuilder } from "../resume/index.js";
 import {
   dataDirectory,
+  ScoutError,
   type ActionLog,
   type Brain,
   type Discovery,
@@ -47,6 +48,7 @@ import {
 } from "../shared/index.js";
 import {
   assertNotPaused,
+  runInTransaction,
   createActionLog,
   createJobStore,
   createSettingsStore,
@@ -58,6 +60,7 @@ import {
   type ConnectToMailbox,
   type ImapCredentials,
 } from "../tracking/index.js";
+import { countSubmitsToday } from "./commands/apply-preparation.js";
 import type { ApplyEnvironmentOverrides } from "./commands/apply-environment.js";
 import { createBoardStore, type BoardStore } from "./boards-store.js";
 import { readModelCallsToday, syncJobFolder, withFolderSync } from "./folder-support.js";
@@ -160,6 +163,12 @@ export interface Application {
   mailboxConnector(credentials: ImapCredentials): ConnectToMailbox;
   /** Throws `ScoutError("paused")` while the kill switch is on. Every acting step calls it first. */
   assertNotPaused(): void;
+  /**
+   * Moves a job to `submitting` and checks today's limit in ONE database transaction, so two
+   * calls (or two processes) can never both pass at limit minus one. Throws `limit-reached` when
+   * this submit would be more than `dailyLimit` submits today; the job is then unchanged.
+   */
+  claimSubmitSlot(jobId: string, reason: string, dailyLimit: number): void;
   /** One folder per job (`<directory>/jobs`): the description, resumes and a log, kept in step with the store. */
   readonly folders: JobFolderManager;
   /**
@@ -289,6 +298,19 @@ export function createApplication(options: ApplicationOptions = {}): Application
     },
     assertNotPaused() {
       assertNotPaused(settingsStore.load());
+    },
+    claimSubmitSlot(jobId, reason, dailyLimit) {
+      const claim = (): void => {
+        if (countSubmitsToday(actionLog, now()) + 1 > dailyLimit) {
+          throw new ScoutError(
+            "limit-reached",
+            `Today's limit of ${dailyLimit} applications is reached, so Scout will not submit another one until tomorrow.`,
+          );
+        }
+        jobStore.transition(jobId, "submitting", reason);
+      };
+      if (database === undefined) claim();
+      else runInTransaction(database, claim);
     },
     folders,
     syncJobFolder(jobId) {

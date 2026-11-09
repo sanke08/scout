@@ -10,6 +10,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApplication, type Application } from "../../app/index.js";
+import { runKeepOpenCommand } from "../../app/commands/apply-keep-open.js";
+import {
+  resolveApplyEnvironment,
+  type HelperRequest,
+} from "../../app/commands/apply-environment.js";
+import { resolveVault } from "../../platforms/index.js";
 import type { BrowserDriver } from "../../apply/index.js";
 import { createFakeDriver, type FakeDriver } from "../../apply/fake-driver.js";
 import {
@@ -48,6 +54,8 @@ const PATH_TO_STATUS: Partial<Record<JobStatus, JobStatus[]>> = {
 export interface ActWorldOptions {
   jobStatus?: JobStatus;
   form?: FixtureName;
+  /** Replaces the form page (for a form no saved fixture has). */
+  html?: string;
   settings?: Partial<Settings>;
   profile?: Profile;
   posting?: Partial<Posting>;
@@ -69,6 +77,12 @@ export interface ActWorldOptions {
   storedCredentials?: Record<string, { username: string; password: string }>;
   /** Makes the plain page download fail. */
   downloadFails?: boolean;
+  /** Makes starting the detached helper fail (as a missing program file would). */
+  helperFails?: boolean;
+  /** The first wait for a confirmation makes the owner press submit (the helper then sees the page change). */
+  ownerSubmits?: boolean;
+  /** The submit button of the form, used when the owner submits. Default: the Greenhouse-style one. */
+  ownerSubmitSelector?: string;
 }
 
 /** A prepared world plus everything the tests look at afterwards. */
@@ -85,6 +99,12 @@ export interface ActWorld {
   notes: string[];
   /** The folder where the job's evidence goes. */
   evidenceDirectory: string;
+  /** Every tool, as the server would offer them. */
+  tools: ScoutTool[];
+  /** The helpers the tool started, in order (nothing real is ever started in a test). */
+  helperStarts: HelperRequest[];
+  /** Runs the last started helper to the end in this process, as the detached process would. */
+  runHelper(extra?: { wait?: string }): Promise<void>;
   /** Validates the input like the server does, then runs the tool. */
   call(name: string, input: unknown): Promise<ToolResult>;
   /** Turns the kill switch on. */
@@ -101,7 +121,7 @@ export function makeActWorld(options: ActWorldOptions = {}): ActWorld {
   writeFileSync(join(directory, "profile.json"), JSON.stringify(profile, null, 2));
 
   const driver = createFakeDriver({
-    html: formHtml(options.form ?? "greenhouse-style"),
+    html: options.html ?? formHtml(options.form ?? "greenhouse-style"),
     ...(options.confirmationText === undefined
       ? {}
       : { confirmationText: options.confirmationText }),
@@ -111,6 +131,8 @@ export function makeActWorld(options: ActWorldOptions = {}): ActWorld {
   const browserOpens: string[] = [];
   const pageDownloads: string[] = [];
   const notes: string[] = [];
+  const helperStarts: HelperRequest[] = [];
+  let ownerHasSubmitted = false;
   /** Filled in once the application exists; the fake browser needs it to flip the pause switch. */
   const holder: { application?: Application } = {};
 
@@ -124,7 +146,7 @@ export function makeActWorld(options: ActWorldOptions = {}): ActWorld {
     readFormPage: async (url: string) => {
       pageDownloads.push(url);
       if (options.downloadFails === true) throw new Error("offline");
-      return formHtml(options.form ?? "greenhouse-style");
+      return options.html ?? formHtml(options.form ?? "greenhouse-style");
     },
     compileResume: async (_source: string, outputDirectory: string, fileStem: string) => {
       if (options.compileFailure !== undefined) throw options.compileFailure;
@@ -133,7 +155,16 @@ export function makeActWorld(options: ActWorldOptions = {}): ActWorld {
       writeFileSync(pdfPath, "%PDF-1.4 fictional built resume");
       return { pdfPath, pageCount: 1 };
     },
-    pause: async () => {},
+    pause: async () => {
+      if (options.ownerSubmits === true && !ownerHasSubmitted) {
+        ownerHasSubmitted = true;
+        await driver.submit(options.ownerSubmitSelector ?? "#submit_app");
+      }
+    },
+    startHelper: async (request: HelperRequest) => {
+      if (options.helperFails === true) throw new Error("the program file is missing");
+      helperStarts.push(request);
+    },
   };
 
   const application = createApplication({
@@ -179,6 +210,22 @@ export function makeActWorld(options: ActWorldOptions = {}): ActWorld {
     browserOpens,
     pageDownloads,
     notes,
+    tools: [...tools.values()],
+    helperStarts,
+    async runHelper(extra) {
+      const request = helperStarts.at(-1);
+      if (request === undefined) throw new Error("No helper was started.");
+      await runKeepOpenCommand(
+        world.application,
+        resolveApplyEnvironment(apply),
+        resolveVault({ vault }),
+        request.args[1] as string,
+        {
+          answersFile: request.args[3] as string,
+          ...(extra?.wait === undefined ? {} : { wait: extra.wait }),
+        },
+      );
+    },
     evidenceDirectory: join(directory, "jobs", folder.name, "evidence"),
     async call(name, input) {
       const tool = tools.get(name);

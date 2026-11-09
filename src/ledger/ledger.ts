@@ -27,11 +27,13 @@ import { ScoutError } from "../shared/index.js";
 import type { JobRecord, JobStatus, JobStore, Posting } from "../shared/index.js";
 import { jobNumberFromLink } from "./job-number.js";
 import type { LedgerStore } from "./ledger-store.js";
+import { returnFromNeedsYou } from "./waiting.js";
 import { renderLedgerMarkdown } from "./render-markdown.js";
 import { reachableStatuses, statusPath } from "./status-path.js";
 import {
   APPLICATION_STATUSES,
   FINISHED_STATUSES,
+  WAITING_FOR_SUBMIT_MARKER,
   applicationDetailsSchema,
   manualApplicationSchema,
   newEventSchema,
@@ -54,8 +56,13 @@ export interface Ledger {
   get(jobId: string): LedgerDetail | undefined;
   /** Applications whose next-step date has come. */
   due(): LedgerEntry[];
-  /** Records an application made outside Scout, or one Scout did not record. */
-  addManual(input: ManualApplication): LedgerDetail;
+  /**
+   * Records an application made outside Scout, or one Scout did not record. `recordedBy` is
+   * `"owner"` (the command line and the web page: the default) or `"model"` (autopilot): the model
+   * is refused when the job already exists in a status before submitting, because a spoofed email
+   * could otherwise mark a job applied that was never sent and block the real application forever.
+   */
+  addManual(input: ManualApplication, options?: { recordedBy?: "owner" | "model" }): LedgerDetail;
   /** Moves an application to a status the user reports, through legal steps only. */
   setStatus(jobId: string, status: JobStatus, note?: string, at?: string): LedgerDetail;
   /** Adds a call, email, interview or note to the history. */
@@ -85,6 +92,24 @@ export interface LedgerOptions {
 
 /** The statuses a manual record walks through, in order, to reach `applied`. */
 const RECORD_CHAIN: readonly JobStatus[] = ["shortlisted", "approved", "submitting", "applied"];
+
+/** Statuses before a submit, where the model may not record "applied" by itself. */
+const PRE_SUBMIT_STATUSES: readonly JobStatus[] = [
+  "found",
+  "shortlisted",
+  "resume-ready",
+  "approved",
+  "skipped",
+  "needs-you",
+];
+
+/** True for a job in `needs-you` whose reason says the filled form is waiting for the owner's submit. */
+function isWaitingForSubmit(job: JobRecord): boolean {
+  return (
+    job.status === "needs-you" &&
+    (job.statusReason ?? "").toLowerCase().includes(WAITING_FOR_SUBMIT_MARKER)
+  );
+}
 
 /** An ISO time from a date (noon UTC) or a full time; an unreadable value is `invalid-input`. */
 function toIsoTime(value: string | undefined, now: Date): string {
@@ -149,6 +174,9 @@ export function createLedger(options: LedgerOptions): Ledger {
     const ids = new Set<string>(
       jobStore.list({ status: [...APPLICATION_STATUSES] }).map((job) => job.id),
     );
+    for (const job of jobStore.list({ status: ["needs-you"] })) {
+      if (isWaitingForSubmit(job)) ids.add(job.id);
+    }
     for (const id of store.appliedTimes().keys()) ids.add(id);
     for (const id of store.allDetails().keys()) ids.add(id);
     return [...ids];
@@ -198,8 +226,10 @@ export function createLedger(options: LedgerOptions): Ledger {
     if (job === undefined) return undefined;
     const details = store.getDetails(jobId);
     const events = store.events(jobId);
+    const waiting = isWaitingForSubmit(job);
     const inLedger =
       APPLICATION_STATUSES.includes(job.status) ||
+      waiting ||
       events.some((event) => event.kind === "applied") ||
       Object.keys(details).length > 0;
     if (!inLedger) return undefined;
@@ -208,7 +238,9 @@ export function createLedger(options: LedgerOptions): Ledger {
     return {
       ...entryOf(job, details, applied, last),
       events,
-      allowedStatuses: reachableStatuses(job.status, undefined),
+      allowedStatuses: waiting
+        ? ["applied", ...reachableStatuses("applied", undefined)]
+        : reachableStatuses(job.status, undefined),
     };
   }
 
@@ -257,12 +289,62 @@ export function createLedger(options: LedgerOptions): Ledger {
     for (const step of steps) jobStore.transition(jobId, step, reason(step));
   }
 
+  /** True when the job is in `needs-you` waiting for the owner's own submit. */
+  function waitingJob(jobId: string): boolean {
+    const job = jobStore.get(jobId);
+    return job !== undefined && isWaitingForSubmit(job);
+  }
+
+  /**
+   * The owner says they pressed submit on a form Scout filled and handed over. The job is walked
+   * back to where it came from, then through `approved` and `submitting` (which marks it as ever
+   * submitted, so it can never be applied for again) to `applied`, then on to `status` by legal
+   * steps. Each step is written down.
+   */
+  function recordHandSubmit(
+    jobId: string,
+    status: JobStatus,
+    note: string | undefined,
+    at: string | undefined,
+  ): LedgerDetail {
+    const cleanNote = note?.trim() ?? "";
+    const target = statusPath("applied", undefined, status);
+    if (target === undefined) {
+      throw new ScoutError(
+        "illegal-transition",
+        `A form waiting for you to press submit can be recorded as applied, or as a later status such as contacted or interviewing. It cannot be recorded as ${status}.`,
+      );
+    }
+    timeOverride = toIsoTime(at, now());
+    try {
+      returnFromNeedsYou(jobStore, jobId, "Passed through while recording your own submit.");
+      if (jobStore.get(jobId)?.status !== "approved") {
+        jobStore.transition(jobId, "approved", "Passed through while recording your own submit.");
+      }
+      jobStore.transition(jobId, "submitting", "Passed through while recording your own submit.");
+      jobStore.transition(
+        jobId,
+        "applied",
+        `You reported that you pressed submit yourself${cleanNote === "" ? "." : `: ${cleanNote}`}`,
+      );
+      walk(jobId, target, (step) =>
+        step === status
+          ? `You reported ${status}${cleanNote === "" ? "." : `: ${cleanNote}`}`
+          : `Passed through on the way to ${status}, as you reported.`,
+      );
+    } finally {
+      timeOverride = undefined;
+    }
+    refreshFile();
+    return require(jobId);
+  }
+
   return {
     list,
     get,
     due: () => list({ dueOnly: true }),
 
-    addManual(input) {
+    addManual(input, options = {}) {
       const checked = manualApplicationSchema.parse(input);
       const when = toIsoTime(checked.appliedOn, now());
       const link = checked.link ?? "";
@@ -283,6 +365,16 @@ export function createLedger(options: LedgerOptions): Ledger {
         throw new ScoutError(
           "invalid-input",
           `This application is already in the ledger as ${existing.status} (id ${id}). Update it with: scout applications status ${id} <status>`,
+        );
+      }
+      if (
+        existing !== undefined &&
+        options.recordedBy === "model" &&
+        PRE_SUBMIT_STATUSES.includes(existing.status)
+      ) {
+        throw new ScoutError(
+          "invalid-input",
+          `Scout already has this job (id ${id}) as ${existing.status} and no submit was recorded, so it will not be marked applied from here. Call flag_for_user so the owner confirms it, then they can record it themselves.`,
         );
       }
       if (existing === undefined) {
@@ -342,6 +434,9 @@ export function createLedger(options: LedgerOptions): Ledger {
       const detail = require(jobId);
       if (detail.status === status) {
         throw new ScoutError("invalid-input", `The application is already ${status}.`);
+      }
+      if (waitingJob(jobId) && status !== "closed" && status !== "skipped") {
+        return recordHandSubmit(jobId, status, note, at);
       }
       const path = statusPath(detail.status, undefined, status);
       if (path === undefined) {

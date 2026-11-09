@@ -8,17 +8,26 @@
  */
 import { z } from "zod";
 import { JOB_STATUSES, type JobStatus } from "../../shared/index.js";
-import { fail, ok, type ScoutTool } from "../tool.js";
+import { fail, okOutside, outside, type ScoutTool } from "../tool.js";
 import {
   JOB_ID_SCHEMA,
   MAXIMUM_DESCRIPTION_CHARACTERS,
+  MAXIMUM_OUTSIDE_ADDRESS_CHARACTERS,
+  MAXIMUM_OUTSIDE_REASON_CHARACTERS,
   compactJob,
   guarded,
+  outsideName,
 } from "./read-support.js";
 
 /** Default and largest number of jobs `list_jobs` returns. */
 const DEFAULT_JOB_LIMIT = 50;
 const MAXIMUM_JOB_LIMIT = 200;
+
+/** The most skills listed for one job. */
+const MAXIMUM_SKILLS = 30;
+
+/** The outside fields of one compact job returned by a tool that changes it. */
+const OUTSIDE_COMPACT_FIELDS = ["company", "title", "location", "statusReason"];
 
 /** The input of tools that take just a job id. */
 const JOB_ID_INPUT = z.object({ jobId: JOB_ID_SCHEMA });
@@ -39,16 +48,44 @@ const readPosting: ScoutTool<typeof JOB_ID_INPUT> = {
     return guarded(() => {
       const job = context.application.jobStore.get(input.jobId);
       if (job === undefined) return fail(unknownJob(input.jobId));
-      const { description, sources, ...details } = job;
-      const truncated = description.length > MAXIMUM_DESCRIPTION_CHARACTERS;
-      return ok({
-        ...details,
-        sources,
-        untrustedText: truncated
-          ? description.slice(0, MAXIMUM_DESCRIPTION_CHARACTERS)
-          : description,
-        untrustedTextTruncated: truncated,
-      });
+      const truncated = job.description.length > MAXIMUM_DESCRIPTION_CHARACTERS;
+      return okOutside(
+        {
+          id: job.id,
+          company: outsideName(job.company),
+          title: outsideName(job.title),
+          location: outsideName(job.location),
+          remote: job.remote,
+          salary: job.salary,
+          seniority: job.seniority,
+          skills: job.skills.slice(0, MAXIMUM_SKILLS).map(outsideName),
+          flags: job.flags,
+          postedAt: job.postedAt,
+          canonicalUrl: outside(job.canonicalUrl, MAXIMUM_OUTSIDE_ADDRESS_CHARACTERS),
+          board: job.board,
+          sources: job.sources.map((source) => ({
+            name: outsideName(source.name),
+            url: outside(source.url, MAXIMUM_OUTSIDE_ADDRESS_CHARACTERS),
+          })),
+          status: job.status,
+          ...(job.statusReason === undefined
+            ? {}
+            : { statusReason: outside(job.statusReason, MAXIMUM_OUTSIDE_REASON_CHARACTERS) }),
+          updatedAt: job.updatedAt,
+          untrustedText: outside(job.description, MAXIMUM_DESCRIPTION_CHARACTERS),
+          untrustedTextTruncated: truncated,
+        },
+        [
+          "company",
+          "title",
+          "location",
+          "skills",
+          "canonicalUrl",
+          "sources",
+          "statusReason",
+          "untrustedText",
+        ],
+      );
     });
   },
 };
@@ -89,7 +126,12 @@ const listJobs: ScoutTool<typeof LIST_JOBS_INPUT> = {
           return words.every((word) => text.includes(word));
         });
       const limit = input.limit ?? DEFAULT_JOB_LIMIT;
-      return ok({ total: matching.length, jobs: matching.slice(0, limit).map(compactJob) });
+      return okOutside({ total: matching.length, jobs: matching.slice(0, limit).map(compactJob) }, [
+        "jobs[].company",
+        "jobs[].title",
+        "jobs[].location",
+        "jobs[].statusReason",
+      ]);
     });
   },
 };
@@ -107,16 +149,19 @@ const getJob: ScoutTool<typeof JOB_ID_INPUT> = {
     return guarded(() => {
       const job = context.application.jobStore.get(input.jobId);
       if (job === undefined) return fail(unknownJob(input.jobId));
-      return ok({
-        ...compactJob(job),
-        salary: job.salary,
-        seniority: job.seniority,
-        skills: job.skills,
-        flags: job.flags,
-        postedAt: job.postedAt,
-        canonicalUrl: job.canonicalUrl,
-        board: job.board,
-      });
+      return okOutside(
+        {
+          ...compactJob(job),
+          salary: job.salary,
+          seniority: job.seniority,
+          skills: job.skills.slice(0, MAXIMUM_SKILLS).map(outsideName),
+          flags: job.flags,
+          postedAt: job.postedAt,
+          canonicalUrl: outside(job.canonicalUrl, MAXIMUM_OUTSIDE_ADDRESS_CHARACTERS),
+          board: job.board,
+        },
+        ["company", "title", "location", "statusReason", "skills", "canonicalUrl"],
+      );
     });
   },
 };
@@ -159,7 +204,7 @@ const recordDecision: ScoutTool<typeof RECORD_DECISION_INPUT> = {
         input.reason,
       );
       context.note(`record_decision ${input.jobId} ${input.decision}`);
-      return ok(compactJob(updated));
+      return okOutside({ ...compactJob(updated) }, OUTSIDE_COMPACT_FIELDS);
     });
   },
 };
@@ -190,7 +235,7 @@ const flagForUser: ScoutTool<typeof FLAG_INPUT> = {
         input.question,
       );
       context.note(`flag_for_user ${input.jobId}`);
-      return ok(compactJob(updated));
+      return okOutside({ ...compactJob(updated) }, OUTSIDE_COMPACT_FIELDS);
     });
   },
 };
@@ -212,17 +257,20 @@ const searchApplications: ScoutTool<typeof SEARCH_INPUT> = {
   handler(input, context) {
     return guarded(() => {
       const found = context.application.ledger.list({ search: input.text });
-      return ok({
-        total: found.length,
-        applications: found.slice(0, 50).map((entry) => ({
-          id: entry.id,
-          company: entry.company,
-          title: entry.title,
-          status: entry.status,
-          appliedAt: entry.appliedAt,
-          lastActivityAt: entry.lastActivityAt,
-        })),
-      });
+      return okOutside(
+        {
+          total: found.length,
+          applications: found.slice(0, 50).map((entry) => ({
+            id: entry.id,
+            company: outsideName(entry.company),
+            title: outsideName(entry.title),
+            status: entry.status,
+            appliedAt: entry.appliedAt,
+            lastActivityAt: entry.lastActivityAt,
+          })),
+        },
+        ["applications[].company", "applications[].title"],
+      );
     });
   },
 };

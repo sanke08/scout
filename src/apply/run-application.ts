@@ -85,6 +85,13 @@ export interface RunArguments {
    */
   beforeSubmit?: () => void;
   /**
+   * Writes the submit marker (moves the job to `submitting`). Default: `jobs.transition`. The
+   * autopilot passes a function that also checks the daily limit in the same database transaction,
+   * so two parallel submits can never both pass at limit minus one. It may throw (`limit-reached`);
+   * nothing is submitted then.
+   */
+  markSubmitting?: (reason: string) => void;
+  /**
    * When true, a confirmation counts only if its wording was not already on the page before the
    * click (a banner on a re-opened form never counts). Unattended runs set it; default false.
    */
@@ -329,11 +336,9 @@ async function submitOnce(
   args.beforeSubmit?.();
   const textBeforeSubmit =
     args.requireNewConfirmation === true ? await readTextQuietly(driver) : "";
-  jobs.transition(
-    jobId,
-    "submitting",
-    "Submit marker set just before the final click; this is never retried.",
-  );
+  const markerReason = "Submit marker set just before the final click; this is never retried.";
+  if (args.markSubmitting === undefined) jobs.transition(jobId, "submitting", markerReason);
+  else args.markSubmitting(markerReason);
 
   let confirmationText: string | undefined;
   let screenshotAfter: Uint8Array | undefined;

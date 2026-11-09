@@ -4,7 +4,9 @@
  * Why it exists (D-013): the model decides the whole job hunt; this file only starts it safely,
  * shows what it does and keeps the owner's controls working: the pause switch and the stop button
  * kill the command within two seconds, a turn limit and a time limit bound every run, and every
- * raw event is kept in `<data>/agent-runs/` so a run can be read back later.
+ * event is summarised in `<data>/agent-runs/` so a run can be read back later (no raw tool
+ * answers, no full inputs: see `run-log.ts`). Only one run works on a data folder at a time, across
+ * processes (`run-lock.ts`).
  *
  * Example: `const runner = createAgentController(application); runner.start("hunt");` returns at
  * once; `runner.state()` shows the live events; `await runner.done()` gives the `AgentRunResult`.
@@ -18,7 +20,10 @@ import { ScoutError } from "../shared/index.js";
 import { spawnAgentProcess, type AgentProcess, type AgentSpawner } from "./agent-process.js";
 import { createGoalsStore, goalsAreStarter } from "./goals-store.js";
 import { buildSystemPrompt, buildTaskPrompt } from "./instructions.js";
+import { MAXIMUM_KEPT_RUNS, logLinesFor, pruneRunFiles } from "./run-log.js";
+import { acquireRunLock, type RunLock } from "./run-lock.js";
 import { oneLine, parseStreamLine } from "./stream-parser.js";
+import { decideWebAccess, type WebAccess } from "./web-access.js";
 import type {
   AgentController,
   AgentEvent,
@@ -37,9 +42,11 @@ export const RUNS_FOLDER_NAME = "agent-runs";
 /** The file inside the runs folder that remembers the last result for other processes. */
 export const LAST_RESULT_FILE_NAME = "last-result.json";
 
-/** The tools the model may use without asking: every Scout tool, and optionally web search and fetch. */
+/** The tools the model may use without asking: every Scout tool, and the web only as `decideWebAccess` allows. */
 const SCOUT_TOOLS_PATTERN = "mcp__scout__*";
-const WEB_TOOLS = ["WebSearch", "WebFetch"];
+
+/** The mail settings the `scout mcp` child needs. Only the NAMES are ever written to the config. */
+export const MAIL_VARIABLE_NAMES = ["SCOUT_IMAP_HOST", "SCOUT_IMAP_USER", "SCOUT_IMAP_PASSWORD"];
 
 /** How the `scout mcp` server is started by the `claude` command. */
 export interface McpLaunch {
@@ -61,8 +68,10 @@ export interface AgentControllerOptions {
   pollMilliseconds?: number;
   /** The wall clock in milliseconds for the time limit. Default `Date.now`. */
   wallClock?: () => number;
-  /** Let the model use web search and page fetch. Default true. */
+  /** Master switch for the web tools; false turns them off for every task. Default true (`web-access.ts` says who gets them). */
   allowWeb?: boolean;
+  /** The environment the mail variable names are looked up in. Default `process.env`. */
+  environment?: Record<string, string | undefined>;
   /** Overrides the `agentMaxTurns` setting (used by the smoke script). */
   maxTurns?: number;
 }
@@ -80,9 +89,18 @@ export function buildAgentArguments(input: {
   configPath: string;
   maxTurns: number;
   systemPrompt: string;
-  allowWeb: boolean;
+  web: WebAccess;
 }): string[] {
-  const allowed = input.allowWeb ? [SCOUT_TOOLS_PATTERN, ...WEB_TOOLS] : [SCOUT_TOOLS_PATTERN];
+  const webTools: string[] = [];
+  const allowed = [SCOUT_TOOLS_PATTERN];
+  if (input.web.search) {
+    webTools.push("WebSearch");
+    allowed.push("WebSearch");
+  }
+  if (input.web.fetchHosts.length > 0) {
+    webTools.push("WebFetch");
+    for (const host of input.web.fetchHosts) allowed.push(`WebFetch(domain:${host})`);
+  }
   return [
     "-p",
     "--model",
@@ -93,7 +111,7 @@ export function buildAgentArguments(input: {
     "--allowedTools",
     allowed.join(","),
     "--tools",
-    input.allowWeb ? WEB_TOOLS.join(",") : "",
+    webTools.join(","),
     "--no-session-persistence",
     "--max-turns",
     String(input.maxTurns),
@@ -112,6 +130,24 @@ function defaultMcpLaunch(): McpLaunch {
     command: process.execPath,
     args: [...process.execArgv, ...(script ? [script] : []), "mcp"],
   };
+}
+
+/**
+ * The `env` block of the MCP config: the data folder, plus a `${NAME}` reference for each mail
+ * variable that is set in the parent. The config holds names, never values, so no secret is
+ * written to disk; the `claude` command fills them in when it starts the server.
+ * Example: with only SCOUT_IMAP_HOST set: `{ SCOUT_DATA_DIR: "/data", SCOUT_IMAP_HOST: "${SCOUT_IMAP_HOST}" }`.
+ */
+export function buildMcpEnvironment(
+  directory: string,
+  environment: Record<string, string | undefined>,
+): Record<string, string> {
+  const block: Record<string, string> = { SCOUT_DATA_DIR: directory };
+  for (const name of MAIL_VARIABLE_NAMES) {
+    if (environment[name] !== undefined && environment[name] !== "")
+      block[name] = "${" + name + "}";
+  }
+  return block;
 }
 
 /** A file-name-safe time stamp such as `2026-11-09T10-00-00`. */
@@ -147,6 +183,7 @@ export function createAgentController(
   const runsDirectory = join(application.directory, RUNS_FOLDER_NAME);
 
   let running = false;
+  let lock: RunLock | undefined;
   let currentTask: AgentTask | undefined;
   let startedAt: string | undefined;
   let events: AgentEvent[] = [];
@@ -167,6 +204,7 @@ export function createAgentController(
   const execute = async (
     task: AgentTask,
     instruction: string | undefined,
+    web: WebAccess,
   ): Promise<AgentRunResult> => {
     const started = application.now();
     const startedMilliseconds = wallClock();
@@ -190,6 +228,7 @@ export function createAgentController(
 
     try {
       mkdirSync(runsDirectory, { recursive: true });
+      pruneRunFiles(runsDirectory, MAXIMUM_KEPT_RUNS - 1);
       const logPath = join(runsDirectory, `${runName}.jsonl`);
       const configPath = join(runsDirectory, `${runName}.mcp.json`);
       const launch = options.mcpLaunch ?? defaultMcpLaunch();
@@ -200,16 +239,17 @@ export function createAgentController(
             scout: {
               command: launch.command,
               args: launch.args,
-              env: { SCOUT_DATA_DIR: application.directory },
+              env: buildMcpEnvironment(application.directory, options.environment ?? process.env),
             },
           },
         }),
+        { mode: 0o600 },
       );
       const args = buildAgentArguments({
         configPath,
         maxTurns,
         systemPrompt: buildSystemPrompt({ task, goals: goalsStore.load() }),
-        allowWeb: options.allowWeb ?? true,
+        web,
       });
       application.actionLog.append({
         actor: "agent",
@@ -223,7 +263,7 @@ export function createAgentController(
         args,
         input: buildTaskPrompt(task, instruction),
         onLine(line) {
-          appendFileSync(logPath, `${line}\n`);
+          for (const logLine of logLinesFor(line)) appendFileSync(logPath, `${logLine}\n`);
           const parsed = parseStreamLine(line);
           toolCalls += parsed.toolCalls;
           if (parsed.turn) turns += 1;
@@ -286,7 +326,7 @@ export function createAgentController(
   };
 
   return {
-    start(task, instruction) {
+    start(task, instruction, startOptions) {
       application.assertNotPaused();
       if (running) {
         throw new ScoutError(
@@ -300,14 +340,23 @@ export function createAgentController(
           "Write your goals first: tell Scout in your own words what jobs you want. Run `scout agent goals --edit FILE` or use the Goals box on the Control page.",
         );
       }
+      const web = decideWebAccess({
+        task,
+        boards: application.boardStore.list(),
+        customWanted: startOptions?.web === true,
+        allowed: options.allowWeb ?? true,
+      });
+      lock = acquireRunLock(runsDirectory, application.now().toISOString());
       running = true;
       currentTask = task;
       startedAt = application.now().toISOString();
       events = [];
       stopReason = undefined;
-      pending = execute(task, instruction).then((result) => {
+      pending = execute(task, instruction, web).then((result) => {
         last = result;
         running = false;
+        lock?.release();
+        lock = undefined;
         currentProcess = undefined;
         record("system", `The run ended: ${result.outcome}. ${oneLine(result.summary, 200)}`);
         application.actionLog.append({

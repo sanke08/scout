@@ -26,9 +26,14 @@ Two tables in `scout.sqlite` (schema version 3): `application_details` (one row 
 | `ledger-store.ts`    | The SQL for the two tables.                                            |
 | `with-ledger.ts`     | Hooks every status change into the ledger.                             |
 | `status-path.ts`     | Finds the legal steps to a status the user reports.                    |
+| `waiting.ts`         | Puts a `needs-you` job back where it came from.                        |
 | `job-number.ts`      | Works out the company's job id from a posting address.                 |
 | `render-markdown.ts` | Builds the text of `APPLICATIONS.md`.                                  |
 | `types.ts`           | The shapes and their zod schemas.                                      |
+
+## A form handed to the owner
+
+A job in `needs-you` whose reason says it is "waiting for you to press submit" is in the ledger and can be recorded as `applied` (or a later status): the ledger walks it back, through `approved` and `submitting` (which marks it as ever submitted), to `applied`, writing each step. `addManual(input, { recordedBy: "model" })` refuses a job Scout already has before submitting (found to needs-you), so a spoofed email cannot mark it applied; the owner's own path is unchanged.
 
 ## Known limits
 

@@ -8,9 +8,13 @@
  *
  * Example: `platformOfAddress("https://www.linkedin.com/jobs/view/1")` is `"linkedin"`.
  */
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  confirmationIsNew,
   mapFields,
   planApplication,
+  saveEvidence,
   type BrowserDriver,
   type FieldMapping,
   type FillPlan,
@@ -19,6 +23,7 @@ import {
 import { autoLogin, findKnownPlatform, platformForUrl } from "../../platforms/index.js";
 import { ScoutError, type Profile, type Settings } from "../../shared/index.js";
 import type { Application } from "../application.js";
+import type { ApplyEnvironment } from "./apply-environment.js";
 import type { PlatformServices } from "./platform-services.js";
 
 /** Reads the form into mappings: the profile and the approved answer bank decide every field they can. */
@@ -144,4 +149,75 @@ export async function trySavedSignIn(
   });
   if (result.signedIn) return { signedIn: true };
   return { signedIn: false, note: result.reason };
+}
+
+/** How long Scout pauses between two looks at the page while waiting for the confirmation. */
+const POLL_MILLISECONDS = 3000;
+
+/**
+ * Looks at the page until a real confirmation message appears or the time is up.
+ * Example: a page that shows "Thank you for applying!" on the second look returns that text; a page
+ * that never does returns `undefined` after `timeoutSeconds`.
+ */
+export async function waitForConfirmation(
+  driver: BrowserDriver,
+  environment: Pick<ApplyEnvironment, "pause">,
+  timeoutSeconds: number,
+): Promise<string | undefined> {
+  const readPageText = async (): Promise<string> => {
+    try {
+      return await driver.readConfirmation();
+    } catch {
+      // The page may be between two loads; look again on the next round.
+      return "";
+    }
+  };
+  // Text already on the form before the user submits (for example a banner saying "your
+  // application has been received" on a re-opened form) must never count as a confirmation.
+  const textBeforeSubmit = await readPageText();
+  let waitedMilliseconds = 0;
+  for (;;) {
+    const text = await readPageText();
+    if (confirmationIsNew(textBeforeSubmit, text)) {
+      return text;
+    }
+    if (waitedMilliseconds >= timeoutSeconds * 1000) return undefined;
+    await environment.pause(POLL_MILLISECONDS);
+    waitedMilliseconds += POLL_MILLISECONDS;
+  }
+}
+
+/** What `saveOwnerSubmitEvidence` needs. */
+export interface OwnerSubmitEvidence {
+  driver: BrowserDriver;
+  plan: FillPlan;
+  evidenceDirectory: string;
+  startedAt: string;
+  finishedAt: string;
+  profileVersion: number;
+  confirmationText: string | undefined;
+  outcome: string;
+}
+
+/**
+ * Saves the final evidence after the owner's own submit: the filled values, the screenshot taken
+ * before (kept from the fill) and after, the confirmation text and the outcome. Failure: the error
+ * is thrown so the caller can report it; the job status is already recorded by then.
+ */
+export async function saveOwnerSubmitEvidence(input: OwnerSubmitEvidence): Promise<void> {
+  const beforePath = join(input.evidenceDirectory, "screenshot-before-submit.png");
+  const filledValues: Record<string, string> = {};
+  for (const action of input.plan.actions) filledValues[action.fieldKey] = action.value;
+  const screenshotAfterSubmit = await input.driver.screenshot();
+  saveEvidence(input.evidenceDirectory, {
+    snapshot: input.plan.snapshot,
+    filledValues,
+    ...(existsSync(beforePath) ? { screenshotBeforeSubmit: readFileSync(beforePath) } : {}),
+    screenshotAfterSubmit,
+    ...(input.confirmationText === undefined ? {} : { confirmationText: input.confirmationText }),
+    startedAt: input.startedAt,
+    finishedAt: input.finishedAt,
+    profileVersion: input.profileVersion,
+    outcome: input.outcome,
+  });
 }

@@ -1,5 +1,6 @@
 /**
- * Registers the apply-related commands: `approve`, `skip`, `undo`, `apply` and `apply self-test`.
+ * Registers the apply-related commands: `approve`, `skip`, `undo`, `apply` and `apply self-test`, and
+ * the hidden `apply-keep-open` that autopilot starts as a detached helper at level Fill.
  *
  * Why it is one function: `src/index.ts` needs a single line to add all of them. Nothing here
  * defines a flag that answers for the user: the final click at level Automatic needs a `yes`
@@ -10,6 +11,7 @@ import type { ApplicationOptions } from "../application.js";
 import { resolveVault } from "../../platforms/index.js";
 import { resolveApplyEnvironment } from "./apply-environment.js";
 import { registerApprovalCommands } from "./apply-approval.js";
+import { runKeepOpenCommand, type KeepOpenOptions } from "./apply-keep-open.js";
 import { runApplyCommand, type ApplyCommandOptions } from "./apply-run.js";
 import { runSelfTestCommand, type SelfTestCommandOptions } from "./apply-self-test.js";
 import { withApplication } from "./with-application.js";
@@ -60,4 +62,22 @@ export function registerApplyCommands(program: Command, overrides: ApplicationOp
         runSelfTestCommand(application, environment, target, options),
       ),
     );
+
+  program
+    .command("apply-keep-open", { hidden: true })
+    .description(
+      "Internal: keeps a filled form open and records the owner's own submit (started by autopilot).",
+    )
+    .argument("<jobId>", "the job's id")
+    .requiredOption("--answers-file <file>", "the hand-off file in <data>/apply-helpers")
+    .option("--wait <seconds>", "how long to wait for the confirmation after the owner submits")
+    .action((jobId: string, options: { answersFile: string; wait?: string }) => {
+      const keepOpenOptions: KeepOpenOptions = {
+        answersFile: options.answersFile,
+        ...(options.wait === undefined ? {} : { wait: options.wait }),
+      };
+      return withApplication(overrides, (application) =>
+        runKeepOpenCommand(application, environment, vault, jobId, keepOpenOptions),
+      );
+    });
 }

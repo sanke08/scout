@@ -14,8 +14,8 @@ import { z } from "zod";
 import { readMailCredentials } from "../../app/commands/mail-credentials.js";
 import { createMailboxReader, matchMessageToJob } from "../../tracking/index.js";
 import { ScoutError } from "../../shared/index.js";
-import { ok, type ScoutTool } from "../tool.js";
-import { JOB_ID_LIMIT, clip, safely } from "./act-support.js";
+import { ok, okOutside, outside, type ScoutTool } from "../tool.js";
+import { JOB_ID_LIMIT, safely } from "./act-support.js";
 
 /** Days back when `daysBack` is not given. */
 const DEFAULT_DAYS_BACK = 14;
@@ -124,7 +124,7 @@ export const mailAndNoteTools: ScoutTool[] = [
           const match = matchMessageToJob(message, jobs);
           compact.push({
             messageId: message.id,
-            fromAddress: message.fromAddress,
+            fromAddress: outside(message.fromAddress, 200),
             ...(message.date === undefined ? {} : { date: message.date }),
             ...(match.kind === "matched"
               ? { matchedJobId: match.jobId }
@@ -135,24 +135,27 @@ export const mailAndNoteTools: ScoutTool[] = [
           blocks.push(
             [
               `--- ${message.id}`,
-              `From: ${clip(message.fromName, 100)} <${message.fromAddress}>`,
-              `Subject: ${clip(message.subject, 200)}`,
-              clip(message.text.replace(/\s+/g, " ").trim(), BODY_PREVIEW_LIMIT),
+              `From: ${outside(message.fromName, 100)} <${outside(message.fromAddress, 200)}>`,
+              `Subject: ${outside(message.subject, 200)}`,
+              outside(message.text.replace(/\s+/g, " ").trim(), BODY_PREVIEW_LIMIT),
             ].join("\n"),
           );
         }
         context.note(`read_inbox: ${messages.length} messages, ${skipped.length} skipped`);
-        return ok({
-          folder: MAIL_FOLDER,
-          since: since.toISOString(),
-          count: messages.length,
-          messages: compact,
-          skipped: skipped.map((item) => ({
-            messageId: item.messageId,
-            reason: clip(item.reason, 200),
-          })),
-          untrustedText: blocks.join("\n\n"),
-        });
+        return okOutside(
+          {
+            folder: MAIL_FOLDER,
+            since: since.toISOString(),
+            count: messages.length,
+            messages: compact,
+            skipped: skipped.map((item) => ({
+              messageId: outside(item.messageId, 200),
+              reason: outside(item.reason, 200),
+            })),
+            untrustedText: blocks.join("\n\n"),
+          },
+          ["messages[].fromAddress", "skipped[].messageId", "skipped[].reason", "untrustedText"],
+        );
       }),
   } satisfies ScoutTool<typeof readInboxInput> as ScoutTool,
   {

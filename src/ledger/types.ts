@@ -145,6 +145,17 @@ export interface LedgerFilter {
 /** Statuses that mean the application is over: nothing is waiting on anyone. */
 export const FINISHED_STATUSES: readonly JobStatus[] = ["rejected", "withdrawn", "closed"];
 
+/**
+ * The reason a job carries while Scout has handed its filled form to the owner ("waiting for you
+ * to press submit"). A job in `needs-you` with a reason that contains these words may already have
+ * been sent by the owner, so the ledger lets the owner (or the model, from evidence) record it as
+ * applied. One source of truth: the apply code writes this text, the ledger recognises it.
+ */
+export const WAITING_FOR_SUBMIT_REASON = "form handed to you, waiting for you to press submit";
+
+/** The words inside the reason that mark a job as waiting for the owner's own submit. */
+export const WAITING_FOR_SUBMIT_MARKER = "waiting for you to press submit";
+
 /** Statuses a job has once it was sent or may have been sent. */
 export const APPLICATION_STATUSES: readonly JobStatus[] = JOB_STATUSES.filter((status) =>
   [

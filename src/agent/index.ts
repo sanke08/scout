@@ -4,6 +4,7 @@ export type {
   AgentController,
   AgentEvent,
   AgentRunResult,
+  AgentStartOptions,
   AgentState,
   AgentTask,
   GoalsStore,

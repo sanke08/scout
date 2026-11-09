@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 import { ScoutError, type JobRecord, type Posting } from "../../shared/index.js";
-import { fail, type ToolResult } from "../tool.js";
+import { fail, outside, type ToolResult } from "../tool.js";
 
 /** The longest id the model may pass (posting ids are at most 64 characters). */
 export const JOB_ID_SCHEMA = z.string().trim().min(1).max(64);
@@ -38,7 +38,23 @@ export async function guarded(body: () => ToolResult | Promise<ToolResult>): Pro
 /** Collapses runs of whitespace and cuts the text to `limit` characters, adding an ellipsis when cut. */
 export function shorten(text: string, limit: number): string {
   const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length <= limit ? flat : `${flat.slice(0, limit)}…`;
+  const cleaned = outside(flat, Number.MAX_SAFE_INTEGER);
+  return cleaned.length <= limit ? cleaned : `${cleaned.slice(0, limit)}…`;
+}
+
+/** The longest company, title, location, skill, reason or address handed to the model. */
+export const MAXIMUM_OUTSIDE_NAME_CHARACTERS = 200;
+export const MAXIMUM_OUTSIDE_REASON_CHARACTERS = 500;
+export const MAXIMUM_OUTSIDE_ADDRESS_CHARACTERS = 500;
+
+/** The `outsideFields` paths of a compact job in a list under `jobs` or `postings`. */
+export function compactJobFields(listName: string): string[] {
+  return ["company", "title", "location", "statusReason"].map((name) => `${listName}[].${name}`);
+}
+
+/** Cleans a name-like outside string (company, title, location, skill). */
+export function outsideName(text: string): string {
+  return outside(text, MAXIMUM_OUTSIDE_NAME_CHARACTERS);
 }
 
 /** The compact shape of a job in lists: enough to choose from, no description. */
@@ -61,12 +77,14 @@ export interface CompactJob {
 export function compactJob(job: JobRecord): CompactJob {
   return {
     id: job.id,
-    company: job.company,
-    title: job.title,
-    location: job.location,
+    company: outsideName(job.company),
+    title: outsideName(job.title),
+    location: outsideName(job.location),
     remote: job.remote,
     status: job.status,
-    ...(job.statusReason === undefined ? {} : { statusReason: job.statusReason }),
+    ...(job.statusReason === undefined
+      ? {}
+      : { statusReason: outside(job.statusReason, MAXIMUM_OUTSIDE_REASON_CHARACTERS) }),
     updatedAt: job.updatedAt,
   };
 }

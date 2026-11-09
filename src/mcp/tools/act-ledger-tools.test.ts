@@ -6,6 +6,9 @@
  * working while Scout is paused; bad input is rejected by the schema before the handler runs.
  */
 import { afterEach, describe, expect, it } from "vitest";
+import { makePosting } from "../../apply/test-helpers.js";
+import { postingIdFromUrl } from "../../discovery/index.js";
+import { WAITING_FOR_SUBMIT_REASON } from "../../ledger/index.js";
 import { dataOf, errorOf, makeActWorld, type ActWorld } from "./act-test-helpers.js";
 
 const worlds: ActWorld[] = [];
@@ -118,5 +121,110 @@ describe("the ledger tools", () => {
     await expect(
       made.call("set_application_details", { jobId: "job-1", nextStepDate: "tomorrow" }),
     ).rejects.toThrow();
+  });
+
+  it("refuses to record a job Scout already has before submitting as applied, and tells the model to flag it", async () => {
+    const made = makeActWorld({ jobStatus: "shortlisted" });
+    worlds.push(made);
+    const link = "https://example.com/jobs/known-posting";
+    const knownId = postingIdFromUrl(link);
+    made.application.jobStore.upsertPosting({
+      ...makePosting(),
+      id: knownId,
+      canonicalUrl: link,
+      sources: [{ name: "greenhouse:examplecorp", url: link }],
+    });
+    made.application.jobStore.transition(knownId, "shortlisted", "found by Scout");
+    const message = errorOf(
+      await made.call("add_application", { company: "ExampleCorp", title: "Engineer", link }),
+    );
+    expect(message).toMatch(/flag_for_user/);
+    expect(made.application.jobStore.get(knownId)?.status).toBe("shortlisted");
+    // Nothing was marked as sent, so a real apply is still possible later.
+    made.application.jobStore.transition(knownId, "resume-ready", "still free");
+    expect(made.application.jobStore.get(knownId)?.status).toBe("resume-ready");
+    // The owner's own path (the ledger without the model's marker) keeps working.
+    expect(
+      made.application.ledger.addManual({ company: "ExampleCorp", title: "Engineer", link }).status,
+    ).toBe("applied");
+  });
+
+  it("needs quoted evidence before the model may set rejected or withdrawn, and stores it in the history", async () => {
+    const made = world();
+    const refused = errorOf(
+      await made.call("update_application_status", { jobId: "job-1", status: "rejected" }),
+    );
+    expect(refused).toMatch(/evidence/);
+    expect(
+      errorOf(
+        await made.call("update_application_status", {
+          jobId: "job-1",
+          status: "withdrawn",
+          evidence: "short",
+        }),
+      ),
+    ).toMatch(/evidence/);
+    expect(made.status()).toBe("applied");
+
+    const quote = "Unfortunately we will not be moving forward with your application.";
+    const moved = dataOf(
+      await made.call("update_application_status", {
+        jobId: "job-1",
+        status: "rejected",
+        evidence: quote,
+      }),
+    );
+    expect(moved["status"]).toBe("rejected");
+    const history = String(
+      dataOf(await made.call("get_application", { jobId: "job-1" }))["untrustedText"],
+    );
+    expect(history).toContain(quote);
+  });
+
+  it("lets a form that waits for the owner's submit be recorded as applied, from wherever it came", async () => {
+    for (const origin of ["shortlisted", "resume-ready", "approved"] as const) {
+      const made = makeActWorld({ jobStatus: origin });
+      worlds.push(made);
+      made.application.jobStore.transition("job-1", "needs-you", WAITING_FOR_SUBMIT_REASON);
+      const detail = dataOf(await made.call("get_application", { jobId: "job-1" }));
+      expect(detail["status"]).toBe("needs-you");
+      expect(detail["allowedStatuses"]).toContain("applied");
+      const moved = dataOf(
+        await made.call("update_application_status", { jobId: "job-1", status: "applied" }),
+      );
+      expect(moved["status"]).toBe("applied");
+      // It was sent, so it can never be reopened or applied for again.
+      expect(() => made.application.jobStore.transition("job-1", "approved", "again")).toThrow();
+      expect(errorOf(await made.call("apply_to_job", { jobId: "job-1" }))).toMatch(
+        /never submitted twice/,
+      );
+    }
+  });
+
+  it("does not let any other needs-you job jump to applied", async () => {
+    const made = makeActWorld({ jobStatus: "shortlisted" });
+    worlds.push(made);
+    made.application.jobStore.transition("job-1", "needs-you", "A CAPTCHA stopped the form.");
+    expect(
+      errorOf(await made.call("update_application_status", { jobId: "job-1", status: "applied" })),
+    ).toBeTruthy();
+    expect(made.status()).toBe("needs-you");
+  });
+
+  it("returns words from outside cleaned and names them in outsideFields", async () => {
+    const made = world();
+    const data = dataOf(
+      await made.call("set_application_details", {
+        jobId: "job-1",
+        recruiterName: "Sam\u0007 Okafor\u200b",
+      }),
+    );
+    expect((data["details"] as { recruiterName: string }).recruiterName).toBe("Sam Okafor");
+    expect(data["outsideFields"]).toEqual(
+      expect.arrayContaining(["details", "statusReason", "company"]),
+    );
+    expect(String(data["notice"])).toMatch(/other people/);
+    const list = dataOf(await made.call("find_applications", {}));
+    expect(list["outsideFields"]).toContain("applications[].details");
   });
 });

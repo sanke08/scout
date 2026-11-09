@@ -11,7 +11,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { makeTestApplication, type TestApplication } from "../app/test-helpers.js";
-import { createScoutMcpServer } from "./server.js";
+import { createScoutMcpServer, createScoutMcpService } from "./server.js";
 import { fail, ok, type ScoutTool } from "./tool.js";
 import { ALL_TOOLS } from "./tools/index.js";
 
@@ -134,6 +134,82 @@ describe("createScoutMcpServer", () => {
       .callTool({ name: "no_such_tool", arguments: {} })
       .catch((error: unknown) => ({ isError: true, error }));
     expect(unknown.isError).toBe(true);
+  });
+});
+
+describe("graceful stop", () => {
+  /** Connects a client to a service whose only tool waits for `release`. */
+  async function connectSlow(): Promise<{
+    client: Client;
+    service: ReturnType<typeof createScoutMcpService>;
+    release: () => void;
+    log: string[];
+    started: Promise<void>;
+  }> {
+    const test = makeTestApplication([], {});
+    const log: string[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let begin: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      begin = resolve;
+    });
+    const slow: ScoutTool = {
+      name: "slow",
+      description: "Waits, then reads the database.",
+      inputSchema: z.object({}),
+      readOnly: false,
+      handler: async (_input, context) => {
+        begin();
+        await gate;
+        log.push(`handler read ${context.application.jobStore.list().length} jobs`);
+        return ok({ done: true });
+      },
+    };
+    const service = createScoutMcpService(test.application, [slow], { drainMilliseconds: 40 });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test", version: "1.0.0" });
+    await service.server.connect(serverSide);
+    await client.connect(clientSide);
+    cleanups.push(async () => {
+      await client.close();
+      test.cleanUp();
+    });
+    return { client, service, release, log, started };
+  }
+
+  it("waits for a running call before reporting that it has stopped, and refuses new calls meanwhile", async () => {
+    const { client, service, release, log, started } = await connectSlow();
+    const running = client.callTool({ name: "slow", arguments: {} });
+    await started;
+    const order: string[] = [];
+    const stopped = service.shutdown().then((drained) => {
+      order.push("stopped");
+      return drained;
+    });
+    expect(service.isStopping()).toBe(true);
+    const refused = await client.callTool({ name: "slow", arguments: {} });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toMatch(/stopping/);
+    expect(order).toEqual([]);
+    release();
+    const result = await running;
+    expect(await stopped).toBe(true);
+    expect(log).toEqual(["handler read 0 jobs"]);
+    expect(result.isError).toBeFalsy();
+  });
+
+  it("stops at once when nothing is running, and gives up after the bound when something is", async () => {
+    const idle = await connectSlow();
+    expect(await idle.service.shutdown()).toBe(true);
+
+    const stuck = await connectSlow();
+    void stuck.client.callTool({ name: "slow", arguments: {} });
+    await stuck.started;
+    expect(await stuck.service.shutdown()).toBe(false);
+    stuck.release();
   });
 });
 

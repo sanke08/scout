@@ -9,6 +9,11 @@
  *
  * Rules: an answer only fills a field that the profile could not fill. A value the profile or the
  * approved bank already supplies is never replaced (identity facts and approved wording win).
+ * The owner's never-guess settings hold whatever the model says: a field mapped `needs-you` (legal,
+ * salary and personal questions, demographic questions when the setting is "ask each time") never
+ * takes a model answer, and "prefer not to say" is applied by the mapping code, not by the model.
+ * A free-text answer must pass the claim check the caller supplies, and nothing the owner listed
+ * under `neverUsed` may appear in any answer.
  *
  * Example: a "Notice period" field that mapped as `unknown` and the answer `"30 days"` becomes
  * `ready` with source `model-answer`; the answer `"Maybe"` for a Yes/No drop-down is refused.
@@ -18,6 +23,39 @@ import { matchOption, normaliseText } from "./map-fields.js";
 
 /** The longest answer accepted for one field. A form answer is never a document. */
 export const MAXIMUM_ANSWER_LENGTH = 5000;
+
+/** What the caller adds to the answer check. Both parts are optional so the module stays small to test. */
+export interface AnswerRules {
+  /** Terms the owner never wants used anywhere (the profile's `neverUsed`). */
+  neverUsed?: readonly string[];
+  /** Returns the reason a free-text answer is refused, or `undefined` when it may be typed. */
+  checkFreeText?: (answer: string) => string | undefined;
+}
+
+/** Question kinds only the owner may answer when no approved answer exists. */
+const OWNER_ONLY_KINDS: readonly FieldMapping["kind"][] = [
+  "legal",
+  "demographic",
+  "salary",
+  "personal",
+];
+
+/** True when the model may not answer this field at all: the owner must. */
+function isOwnerOnly(mapping: FieldMapping): boolean {
+  return (
+    mapping.status === "needs-you" ||
+    (mapping.status !== "ready" && OWNER_ONLY_KINDS.includes(mapping.kind))
+  );
+}
+
+/** The first `neverUsed` term found in `text` as whole words, or `undefined`. */
+function forbiddenTermIn(text: string, neverUsed: readonly string[]): string | undefined {
+  const plain = ` ${normaliseText(text)} `;
+  return neverUsed.find((term) => {
+    const wanted = normaliseText(term);
+    return wanted !== "" && plain.includes(` ${wanted} `);
+  });
+}
 
 /** One answer that was not used, with a sentence saying why. */
 export interface RefusedAnswer {
@@ -69,6 +107,7 @@ function valueFor(mapping: FieldMapping, answer: string): { value: string } | { 
 export function applyModelAnswers(
   mappings: FieldMapping[],
   answers: Record<string, string>,
+  rules: AnswerRules = {},
 ): ModelAnswerResult {
   const refused: RefusedAnswer[] = [];
   const ignored: RefusedAnswer[] = [];
@@ -94,12 +133,33 @@ export function applyModelAnswers(
         fieldKey,
         reason: `The profile already fills this field (${mapping.reason})`,
       });
+    } else if (isOwnerOnly(mapping)) {
+      refused.push({
+        fieldKey,
+        reason: `This is a question only the owner may answer (${mapping.reason}) so the model's answer was not used.`,
+      });
     } else if (answer === "") {
       refused.push({ fieldKey, reason: "The answer is empty." });
     } else {
       const outcome = valueFor(mapping, answer);
+      const forbidden =
+        "value" in outcome ? forbiddenTermIn(outcome.value, rules.neverUsed ?? []) : undefined;
+      const isFreeText =
+        mapping.field.type !== "select" &&
+        mapping.field.type !== "radio" &&
+        mapping.field.type !== "checkbox" &&
+        mapping.field.options.length === 0;
+      const unsupported =
+        "value" in outcome && isFreeText ? rules.checkFreeText?.(outcome.value) : undefined;
       if ("reason" in outcome) {
         refused.push({ fieldKey, reason: outcome.reason });
+      } else if (forbidden !== undefined) {
+        refused.push({
+          fieldKey,
+          reason: `The answer uses "${forbidden}", which the owner listed as never to be used. Answer without it.`,
+        });
+      } else if (unsupported !== undefined) {
+        refused.push({ fieldKey, reason: unsupported });
       } else {
         used[fieldKey] = outcome.value;
         resolved.set(fieldKey, {

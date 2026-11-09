@@ -12,3 +12,12 @@ data/
 *.out
 *.pdf
 !fixtures/**/*.pdf
+
+# Personal data and run logs: never commit these (real data lives in SCOUT_DATA_DIR, outside the repository)
+agent-runs/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+goals.md
+.demo-data/

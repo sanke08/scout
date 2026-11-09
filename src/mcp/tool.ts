@@ -31,6 +31,11 @@ export interface ToolContext {
   assertNotPaused(): void;
   /** Writes one line to the agent run log (tool name, short argument summary, outcome). */
   note(line: string): void;
+  /**
+   * True once the server has begun to stop (the owner pressed Stop or the run ended). A tool that
+   * is about to do something it could not take back (a submit) checks it first. Default: never.
+   */
+  isStopping?(): boolean;
 }
 
 /** One capability offered to the model. */
